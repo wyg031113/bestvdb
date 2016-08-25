@@ -1,0 +1,6 @@
+*.o
+*~
+vdb_client
+vdb_server
+paramgen
+params/
