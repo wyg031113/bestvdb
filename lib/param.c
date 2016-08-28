@@ -13,14 +13,15 @@
 /**buf = dir+"/"+fname
  * buf len must be MAX_FILE_NAME_LEN
  */
-void check_build_path(const char *dir, const char *fname, char *fbuf)
+int check_build_path(const char *dir, const char *fname, char *fbuf)
 {
     CHECK2(dir != NULL && fname != NULL);
-    CHECK2(strlen(dir) + strlen(fname) + 1 < MAX_FILE_NAME_LEN);
+    fbuf[0] = '\0';
+    CHECK_RET(strlen(dir) + strlen(fname) + 1 < MAX_FILE_NAME_LEN);
     strcpy(fbuf, dir);
     strcat(fbuf, "/");
     strcat(fbuf, fname);
-
+    return SUCCESS;
 }
 
 void save_aparam(pbc_param_t par, char *dir)

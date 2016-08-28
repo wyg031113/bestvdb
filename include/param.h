@@ -15,7 +15,7 @@
 #define FILE_y "y"
 #define FILE_g "g"
 #define ELEMENT_MAX_LEN 256
-void check_build_path(const char *dir, const char *fname, char *fbuf);
+int check_build_path(const char *dir, const char *fname, char *fbuf);
 void save_aparam(pbc_param_t par, char *dir);
 void save_int(int n, char *dir, char *name);
 void make_dir(char *src, int n);

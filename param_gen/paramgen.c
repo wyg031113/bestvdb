@@ -5,19 +5,17 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/types.h>
-#include <pthread.h>
 #include <deftype.h>
 #include <time.h>
 
 #include <config.h>
 #include <debug.h>
 #include <param.h>
-#define MAX_THREADS 64
+#define MAX_PROCESS 64
 struct Hi_Task
 {
     uint64 start;
     uint64 len;
-    pthread_t tid;
     char *fname;
     pid_t pid;
 };
@@ -25,7 +23,7 @@ struct Hi_Task
 int q = 512;
 int r = 160;
 int n = 100;
-int nthread = 1;
+int nproc = 1;
 int help = 0;
 char server_conf[MAX_FILE_NAME_LEN] = "../server/vdb_server_conf/params";
 char client_conf[MAX_FILE_NAME_LEN] = "../client/vdb_client_conf/params";
@@ -34,7 +32,7 @@ struct config config_table[]=
         {"q", &q, CFG_INT, sizeof(int), "q:", "q in G"},
         {"r", &r, CFG_INT, sizeof(int), "r:", "r in G"},
         {"n", &n, CFG_INT, sizeof(int), "n:", "database size"},
-        {"nthread", &nthread, CFG_INT, sizeof(int), "t:", "thread num"},
+        {"nproc", &nproc, CFG_INT, sizeof(int), "t:", "thread num"},
         {"help", &help, CFG_INT, sizeof(int), "h", "help"},
         {"server_conf", server_conf, CFG_STR, MAX_FILE_NAME_LEN, "s:", "server's config file"},
         {"client_conf", client_conf, CFG_STR, MAX_FILE_NAME_LEN, "c:", "client's config file"},
@@ -70,7 +68,7 @@ void gen_aparam(void)
 void save_n()
 {
     save_int(n, server_conf, FILE_N);
-    save_int(n, client_conf, FILE_N);
+    //save_int(n, client_conf, FILE_N);
 }
 
 void buid_config_dir(void)
@@ -161,28 +159,34 @@ void *hij_process(void*arg)
 
 }
 
-void task_split(int n, int nthread, void *(*thread)(void *arg), const char *file_name)
+void task_split(int n, int nproc, void *(*thread)(void *arg), const char *file_name)
 {
     int i;
     struct Hi_Task *hi_tasks = NULL;
     char fbuf[MAX_FILE_NAME_LEN];
     uint64 task_len = 0;
     check_build_path(server_conf, file_name, fbuf);
-    task_len = (n / nthread) + ( (n % nthread) == 0? 0 : 1);
-    nthread = n/task_len + ((n%task_len)==0?0:1);
-    CHECK2(hi_tasks = malloc(sizeof(struct Hi_Task) * nthread));
-    for(i = 0; i < nthread; i++)
+    task_len = (n / nproc) + ( (n % nproc) == 0? 0 : 1);
+    nproc = n/task_len + ((n%task_len)==0?0:1);
+    CHECK2(hi_tasks = malloc(sizeof(struct Hi_Task) * nproc));
+    for(i = 0; i < nproc; i++)
     {
         hi_tasks[i].fname = fbuf;
         hi_tasks[i].start = i * task_len;
-        if(i == nthread - 1)
+        if(i == nproc - 1)
             hi_tasks[i].len = n - task_len * i;
         else
             hi_tasks[i].len = task_len;
         //CHECK(pthread_create(&hi_tasks[i].tid, NULL, thread, &hi_tasks[i]));
     }
-
-    for(i = 0; i < nthread; i++)
+    if(nproc == 1)
+    {
+            DEBUG("Process %d begin...\n", i);
+            thread(&hi_tasks[0]);
+            DEBUG("Process %d finish...\n", i);
+    }
+    else
+    for(i = 0; i < nproc; i++)
     {
         if((hi_tasks[i].pid = fork())==0)
         {
@@ -194,11 +198,11 @@ void task_split(int n, int nthread, void *(*thread)(void *arg), const char *file
     }
 
     int status = 0;
-    for(i = 0; i < nthread; i++)
+    for(i = 0; nproc > 1 && i < nproc; i++)
         waitpid(hi_tasks[i].pid, &status, 0);
     printf("Master.....\n");
     /*
-    for(i = 0; i < nthread; i++)
+    for(i = 0; i < nproc; i++)
     {
         int status = 0;
         pthread_join(hi_tasks[i].tid, (void**)&status);
@@ -241,9 +245,9 @@ void gene_vdb_param(void)
 		element_random(z[i]);
 	}
     start = time(NULL);
-    task_split(n, nthread, hi_process, FILE_HI);
+    task_split(n, nproc, hi_process, FILE_HI);
     end = time(NULL);
-    INFO("%d threads to calc hi, use %.2f seconds\n", nthread, (double)(end-start));
+    INFO("%d threads to calc hi, use %.2f seconds\n", nproc, (double)(end-start));
 
     start = time(NULL);
     task_split(n, 1, hi_process, "Hi_test");
@@ -251,9 +255,9 @@ void gene_vdb_param(void)
     INFO("%d threads to calc hi, use %.2f seconds\n", 1, (double)(end-start));
 
     start = time(NULL);
-    task_split(n/2+(n%2==1?1:0), nthread, hij_process, FILE_HIJ);
+    task_split(n/2+(n%2==1?1:0), nproc, hij_process, FILE_HIJ);
     end = time(NULL);
-    INFO("%d threads to calc hij, use %.2f seconds\n", nthread, (double)(end-start));
+    INFO("%d threads to calc hij, use %.2f seconds\n", nproc, (double)(end-start));
 
     start = time(NULL);
     task_split(n/2+(n%2==1?1:0), 1, hij_process, "Hij_test");
@@ -288,14 +292,14 @@ int main(int argc, char *argv[])
         exit(0);
     }
     //show_config_table();
-    nthread = nthread > MAX_THREADS ? MAX_THREADS : nthread;
-    nthread = nthread > n ? n : nthread;
+    nproc = nproc > MAX_PROCESS ? MAX_PROCESS : nproc;
+    nproc = nproc > n ? n : nproc;
     INFO("All config is here.\n");
     show_config();
     printf("\n");
     buid_config_dir();
     gen_aparam();
-    //save_n();
+    save_n();
     gene_vdb_param();
     show_all_global_element();
     destroy_global_elemment();

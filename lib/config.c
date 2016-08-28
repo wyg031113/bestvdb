@@ -27,11 +27,20 @@ int read_line(FILE *fp, char *data, int len)
     while(i<len)
     {
         data[i]=fgetc(fp);
-        if(data[i] == '\n' || data[i] == EOF)
+        if(data[i] == '\n')
+        {
+            data[i] = '\0';
+            if(i == 0)
+                continue;
+            else
+                break;
+        }
+        if(data[i] == EOF)
         {
             data[i] = '\0';
             break;
         }
+
         i++;
     }
     if(i == len)
@@ -146,14 +155,15 @@ int load_config(const char *config_file)
 
     while(read_line(fp, line, LINE_LEN) > 0)
     {
-        //printf("%s\n", line);
         if(trim_line(line, &name, &value) == 0)
         {
            // printf("name:%s\t\tvalue:%s\n", name, value);
-            if(parse(name, value) !=0)
+            int ret = parse(name, value);
+            if(ret != 0)
                 fprintf(stderr, "unmach config:%s =  %s\n", name, value);
         }
     }
+
     fclose(fp);
 
     return 0;

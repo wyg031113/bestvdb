@@ -67,17 +67,23 @@
 #define INFO_MSG(format, ...) MSG(stdout, format,##__VA_ARGS__)
 
 //调试消息
-#define DEBUG_MSG(format, ...) MSG(stderr, format,##__VA_ARGS__)
+#define DEBUG_MSG(format, ...) MSG(stdout, format,##__VA_ARGS__)
 
 
 /*为来简单化一些系统调用,这里定义了几个宏来检查返回值。*/
+#define err(x)\
+do{\
+    MSG(stderr, "CHECK<%s> failed! errno:%s\n", #x, strerror(errno));\
+}while(0)
 
 //打印出错原因，并退出进程
 #define err_quit(x)\
 do{\
-	INFO("CHECK<%s> failed!     errno:%s\n", #x, strerror(errno));\
+    err(x);\
 	exit(1);\
 }while(0)
+
+
 
 //x是-1,输出errno,并退出
 #define CHECK(x) do{if((int)(x)==-1){\
@@ -85,12 +91,25 @@ do{\
 	}\
 }while(0)
 
-
 //x是false,输出errno,并退出
 #define CHECK2(x) do{if(!(x)){\
 	err_quit(x);\
 	}\
 }while(0)
+
+#define CHECK_RET(x) do{if(!(x)){\
+	err(x);\
+    return FAIL;\
+	}\
+}while(0)
+
+#define CHECK_GO(x, label) do{if(!(x)){\
+	err(x);\
+    goto label;\
+	}\
+}while(0)
+
+
 
 //注意，断言操作关闭调试后失效
 #ifdef DEBUG_ON
