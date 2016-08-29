@@ -3,6 +3,12 @@
 #include <pbc/pbc.h>
 #include <deftype.h>
 #define MAX_STR_LEN 128
+#define INITED "inited"
+#define UNINIT "uninit"
+#define INITING "initing"
+#define VER_SUCC "success"
+#define VER_FAIL "fail"
+#define VER_ING  "verifying"
 struct vdb_pk
 {
     char ip[17];
