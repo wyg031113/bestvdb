@@ -17,6 +17,7 @@ create table `vdb_pk`(  `id`        INT NOT NULL  PRIMARY KEY AUTO_INCREMENT,
                         `dbsize`    int,
                         `CVerTimes` int,
                         `VerTimes`  int,
+                        `LastVerStatus` varchar(64),
                         `VerStatus` varchar(64),
                         `VerProg`   int
                        );

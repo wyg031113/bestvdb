@@ -18,7 +18,7 @@ int beinit = -1;
 int idx = -1;
 int query = -1;
 int update = -1;
-const char *config_file = "./vdb_client_conf/vdb_client.conf";
+const char *config_file = "/etc/vdb_client_conf/vdb_client.conf";
 
 char sk_sql_ip[17] = "127.0.0.1";
 int  sk_sql_port = 3306;
@@ -32,6 +32,7 @@ char pk_sql_user[64] = "root";
 char pk_sql_passwd[64] = "letmein";
 char pk_sql_dbname[64] = "vdb_server";
 
+int ver_status = -1;
 struct config config_table[] =
         {
             {"serip", serip, CFG_STR, 17, "i:", "server ip addr."},
@@ -91,7 +92,6 @@ int hash(element_t H0, element_t Cf1, element_t C0, uint64 T)
     element_to_bytes(buf+len1, C0);
     memcpy(buf+len1+len2, &T, len3);
     element_from_hash(H0, buf, len);
-    element_printf("Hash:%B\n", H0);
     free(buf);
 	return SUCCESS;
 }
@@ -193,22 +193,10 @@ int handle_init(int serfd, int id)
     CHECK_GO(SUCCESS == db_put_int(conn_pk, "vdb_pk", "VerTimes", 0, id), out);
     CHECK_GO(SUCCESS == db_put_int(conn_pk, "vdb_pk", "VerProg", -1, id), out);
     CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "VerStatus", "idle", id), out);
-#ifdef DEBUG_ON
-    //test
-    int test=0;
-    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pair", "g", pair->g, pk->pair_id), out);
-    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pk", "Y", pk->Y, id), out);
-    CHECK_GO(SUCCESS == db_get_ele(conn_sk, "vdb_sk", "y", sk->y, id), out);
-    CHECK_GO(SUCCESS == db_get_int(conn_pk, "vdb_pk", "CVerTimes", &test, id), out);
-    CHECK_GO(SUCCESS == db_get_int(conn_pk, "vdb_pk", "VerTimes", &test, id), out);
-    CHECK_GO(SUCCESS == db_get_int(conn_pk, "vdb_pk", "VerProg", &test, id), out);
-    CHECK_GO(SUCCESS == db_get_str(conn_pk, "vdb_pk", "VerStatus", vpk.data, id), out);
-#endif
 
     //send FINISH
     CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_I_CFINISH, 0, 0), out);
-
-       //recv server finish
+    //recv server finish
     CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk), out);
     CHECK_GO(vpk.type == T_I_SFINISH, out);
     CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "beinited", "inited", id), out);
@@ -258,22 +246,9 @@ int vdb_verify(int x, mpz_t v, element_t paix, struct vdb_ss *ss, struct vdb_pk 
 	element_init_G1(gh, pair->pair);
 	element_init_G1(hv, pair->pair);
 	element_init_G1(ghhv, pair->pair);
-    //mpz_add(v, v, max_integer);
-    /*
-    if(element_cmp(hi, pp->hi[x]))
-    {
-        printf("Oh, dear!! x= %d\n", x);
-        element_printf("calHi=%B\nhi=%B\n", hi, pp->hi[x]);
-        exit(-1);
-    }
-    */
-    element_printf("CT:%B\n", pk->CT);
-    element_printf("HT:%B\n", ss->HT);
-    element_printf("g:%B\n", pair->g);
-    element_printf("pai:%B\n", paix);
+
 	element_pow_mpz(hv, hi, v);
 	element_div(gh, pk->CT, ss->HT);
-    element_printf("CT/HT=%B\n", gh);
 	element_div(ghhv, gh, hv);
 	pairing_apply(e3, ghhv, hi, pair->pair);
 
@@ -378,9 +353,17 @@ int handle_query(int serfd, int id, int x)
     CHECK_GO(vpk.len == sizeof(uint64), out);
     ss.T = *(uint64*)vpk.data;
     if(vdb_verify(x, v, paix,  &ss, pk, pair, hx))
+    {
         CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "VerStatus", VER_SUCC, id), out);
+        INFO("Verify Successfully!\n");
+        ver_status = 1;
+    }
     else
+    {
         CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "VerStatus", VER_FAIL, id), out);
+        INFO("Verify Failed!\n");
+        ver_status = 2;
+    }
 
     CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk), out);
     CHECK_GO(vpk.type == T_Q_SFINISH, out);
@@ -401,7 +384,7 @@ out:
     if(conn_pk)                     release_connection(conn_pk);
     if(pair)                        free(pair);
     if(pk)                          free(pk);
-    INFO("Init finished.!\n");
+    INFO("Query finished.!\n");
     return ret;
 }
 
@@ -420,12 +403,17 @@ int main(int argc, char *argv[])
         show_usage();
         exit(0);
     }
+#ifdef DEBUG_ON
     show_config();
+#endif
     CHECK(serfd = connect_server());
     if(beinit>=0)
         handle_init(serfd, beinit);
     if(query>=0)
-        handle_query(serfd, query, idx);
+    {
+        CHECK_RET(SUCCESS == handle_query(serfd, query, idx));
+        return ver_status;
+    }
     close(serfd);
 
     return 0;

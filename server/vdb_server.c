@@ -17,8 +17,8 @@ char listen_ip[17] = "0.0.0.0";
 int listen_port = 55555;
 int help = 0;
 int daem = 0;
-const char *config_file = "./vdb_server_conf/vdb_server.conf";
-const char *params_dir = "./vdb_server_conf/params";
+const char *config_file = "/etc/vdb_server_conf/vdb_server.conf";
+const char *params_dir = "/etc/vdb_server_conf/params";
 volatile int stop = 0;
 char ss_sql_ip[17] = "127.0.0.1";
 int  ss_sql_port = 3306;
@@ -101,7 +101,6 @@ int calc_send_CR(int client_fd, void *conn_db, struct vdb_pk *pk,
     {
         CHECK_GO(1 == fread(ele, ele_len, 1, fp), out);
         CHECK_GO(ele_len = element_from_bytes_compressed(hi, ele), out);
-        element_printf("h[%d] = %B\n", i, hi);
         CHECK_GO(SUCCESS == db_getv(conn_db, pk->dbtable, i, vi), out);
         element_pow_mpz(hv, hi, vi);
         if(i == 0)
@@ -109,7 +108,6 @@ int calc_send_CR(int client_fd, void *conn_db, struct vdb_pk *pk,
         else
             element_mul(CR, CR, hv);
     }
-    element_printf("Init CR=%B\n", CR);
     ele_len = element_length_in_bytes_compressed(CR);
     CHECK_GO(ele_len < MAX_DATA_LEN, out);
     element_to_bytes_compressed(vpk->data, CR);
@@ -151,7 +149,7 @@ int handle_init(int client_fd, struct vdb_packet *vpk)
     //begin init
     CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_I_ID, out);
     id = vpk->val;
-    DEBUG("Init id is:%d\n", id);
+    INFO("Init id is:%d\n", id);
 
     CHECK_GO(NULL != (pk = (struct vdb_pk *)malloc(sizeof(struct vdb_pk))), out);
     CHECK_GO (NULL != (ss = (struct vdb_ss *)malloc(sizeof(struct vdb_ss))), out);
@@ -170,6 +168,7 @@ int handle_init(int client_fd, struct vdb_packet *vpk)
     CHECK_GO(NULL != (conn_db = (void*)get_connection(pk->ip, pk->port, pk->dbuser,
                                                pk->dbpassword, pk->dbname)), out);
 
+    INFO("Init dbsize is:%d\n", pk->dbsize);
     //calc CR and build C-1 CU0 in ss
     CHECK_GO(SUCCESS == calc_send_CR(client_fd, conn_db, pk, pair, vpk, ss), out);
     cr_suc = SUCCESS;
@@ -227,7 +226,7 @@ int calc_paix(element_t paix, void *conn, struct vdb_pk *pk, struct vdb_pair *pa
     element_t hv;
     int ret = FAIL;
     int flag = 0;
-    DEBUG("calculate proof pai...\n");
+    INFO("calculate proof pai...\n");
     ele_len = pairing_length_in_bytes_compressed_G1(pair->pair);
     CHECK_RET(ele_len <= ELEMENT_MAX_LEN);
     CHECK_RET(SUCCESS == check_build_path(params_dir, pair->hij_path, fhij));
@@ -255,7 +254,6 @@ int calc_paix(element_t paix, void *conn, struct vdb_pk *pk, struct vdb_pair *pa
         CHECK_GO(0 == fseek(fp, ele_len * ((uint64)a *((uint64)a-1)/2+(uint64)b), SEEK_SET), out);
         CHECK_GO(1 == fread(ele, ele_len, 1, fp), out);
         CHECK_GO(ele_len = element_from_bytes_compressed(hij, ele), out);
-        element_printf("h[%d][%d]=%B\n", x, j, hij);
         CHECK_GO(SUCCESS == db_getv(conn, pk->dbtable, j, v), out);
         element_pow_mpz(hv, hij, v);
         if(flag == 0)
@@ -293,7 +291,7 @@ int send_proof(int client_fd, element_t paix, struct vdb_pair *pair,
     char ele[ELEMENT_MAX_LEN];
     int ele_len = 0;
     element_t hi;
-    DEBUG("Sending proof\n");
+    INFO("Sending proof\n");
     CHECK_RET(SUCCESS == check_build_path(params_dir, pair->hi_path, fhi));
     //send paix Ht CDTm1
     CHECK_RET(SUCCESS == send_ele(client_fd, paix, T_Q_PAIX, vpk));
@@ -346,7 +344,7 @@ int handle_query(int client_fd, struct vdb_packet *vpk)
     id = vpk->val;
     CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_Q_X, out);
     x = vpk->val;
-    DEBUG("verify id is:%d x is:%d\n", id, x);
+    INFO("verify id is:%d x is:%d\n", id, x);
 
     CHECK_GO(NULL != (pk = (struct vdb_pk *)malloc(sizeof(struct vdb_pk))), out);
     CHECK_GO (NULL != (ss = (struct vdb_ss *)malloc(sizeof(struct vdb_ss))), out);
@@ -418,14 +416,14 @@ void *thread(void *arg)
         switch(vpk.type)
         {
             case T_I_BEGIN:
-                DEBUG("Begin initing...\n");
+                INFO("Begin initing... \n");
                 CHECK_GO(SUCCESS == handle_init(client_fd, &vpk), out1);
-                DEBUG("Inited successfully.\n");
+                INFO("Inited successfully.\n");
                 break;
             case T_Q_BEGIN:
-                DEBUG("Begin verifying...\n");
+                INFO("Begin verifying...\n");
                 CHECK_GO(SUCCESS == handle_query(client_fd, &vpk), out1);
-                DEBUG("Verify finished.\n");
+                INFO("Verify finished.\n");
                 break;
             default:
                 DEBUG("Unknow type:%d\n", vpk.type);
@@ -434,7 +432,7 @@ void *thread(void *arg)
     }
 out1:
     close(client_fd);
-    DEBUG("Client closed!\n");
+    INFO("Client closed!\n");
 }
 
 void run_server(void)
@@ -481,7 +479,9 @@ int main(int argc, char *argv[])
         show_usage();
         exit(0);
     }
+#ifdef DEBUG_ON
     show_config();
+#endif
     if(daem)
         init_daemon();
     run_server();

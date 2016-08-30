@@ -34,7 +34,7 @@ int  pk_sql_port = 3306;
 char pk_sql_user[64] = "root";
 char pk_sql_passwd[64] = "letmein";
 char pk_sql_dbname[64] = "vdb_server";
-
+const char *config_file = "/etc/vdb_paramgen/paramgen.conf";
 
 struct config config_table[]=
 {
@@ -114,8 +114,6 @@ void *hi_process(void *arg)
     for(i = 0; i < ht->len; i++)
     {
 		element_pp_pow_zn(hi, z[i+ht->start], gpp);
-        printf("%lld", i);
-        element_printf("H[] = %B\n", hi);
         CHECK2(element_to_bytes_compressed(ele, hi) == ele_len);
         CHECK2(fwrite(ele, ele_len, 1, fp) == 1);
     }
@@ -155,8 +153,6 @@ void *hij_process(void*arg)
 		    element_pp_pow_zn(hij, mulz, gpp);
             CHECK2(element_to_bytes_compressed(ele, hij) == ele_len);
             CHECK2(fwrite(ele, ele_len, 1, fp) == 1);
-            printf("%lld,%lld", i, j);
-            element_printf("H[][] = %B\n", hij);
         }
 
     int new_start = n - ht->start - ht->len;
@@ -170,8 +166,6 @@ void *hij_process(void*arg)
 		    element_pp_pow_zn(hij, mulz, gpp);
             CHECK2(element_to_bytes_compressed(ele, hij) == ele_len);
             CHECK2(fwrite(ele, ele_len, 1, fp) == 1);
-            printf("%lld,%lld", i, j);
-            element_printf("H[][] = %B\n", hij);
         }
 
 	element_pp_clear(gpp);
@@ -274,20 +268,6 @@ void gene_vdb_param(void)
    	element_random(g);
     check_build_path(server_conf, FILE_g, fbuf);
     save_ele(g, fbuf);
-/*
-    INFO("Random select y.\n");
-	element_init_Zr(y, pair);
-	element_random(y);
-    check_build_path(client_conf, FILE_y, fbuf);
-    save_ele(y, fbuf);
-
-    INFO("Compute Y.\n");
- 	//compute Y
-	element_init_G1(Y, pair);
-	element_pow_zn(Y, g, y); //Y=g^y
-    check_build_path(client_conf, FILE_Y, fbuf);
-    save_ele(Y, fbuf);
-*/
 
     INFO("Random select zi...\n");
 	for(i = 0; i < n; i++)
@@ -342,6 +322,7 @@ int main(int argc, char *argv[])
         show_usage();
         exit(0);
     }
+    load_config(config_file);
     //show_config_table();
     nproc = nproc > MAX_PROCESS ? MAX_PROCESS : nproc;
     nproc = nproc > n ? n : nproc;

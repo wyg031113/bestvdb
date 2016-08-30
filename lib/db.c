@@ -29,7 +29,6 @@ int element_to_str(const char *ename, element_t ele, char *e_str)
         n = element_length_in_bytes(ele);
     else
         n = element_length_in_bytes_compressed(ele);
-  // element_printf("n = %d, %s=%B\n", n, ename, ele);
     CHECK_RET(n <= MAX_DATA_LEN);
     if(strcmp(ename,"y") == 0)
         element_to_bytes(data, ele);
@@ -63,7 +62,6 @@ int str_to_element(const char *ename, element_t ele, const char *e_str)
         element_from_bytes(ele, data);
     else
         element_from_bytes_compressed(ele, data);
-    element_printf("%s=%B\n", ename, ele);
     return SUCCESS;
 
 }
@@ -306,7 +304,7 @@ out2:
 int db_put_str(void *connection, const char *table, const char *ename, const char *val, int id)
 {
     char sql[MAX_SQL_LEN+MAX_STR_LEN];
-    DEBUG("PutStr:%s\n", val);
+    //DEBUG("PutStr:%s\n", val);
     MYSQL *conn = (MYSQL*)connection;
     snprintf(sql, MAX_SQL_LEN+MAX_STR_LEN, "update %s set %s = '%s' where id = '%d'", table, ename, val, id);
     CHECK_RET(!mysql_query(conn, sql));
@@ -329,7 +327,7 @@ int db_get_str(void *connection, const char *table, const char *ename, char *val
     CHECK_GO(row[0], out2);
     CHECK_GO(strlen(row[0]) < MAX_STR_LEN, out1);
     strcpy(val, row[0]);
-    DEBUG("GetStr:%s\n", val);
+   // DEBUG("GetStr:%s\n", val);
     ret = SUCCESS;
 out1:
     while(NULL != (mysql_fetch_row(res)));
@@ -379,7 +377,6 @@ int db_getv(void *connection, const char *table, int x, mpz_t v)
         snprintf(md_str+len, 3, "%02x", (unsigned char)md[i]);
     mpz_set_str(v, md_str, 16);
     ret = SUCCESS;
-    mpz_out_str(stdout, 10, v);
 out:
     if(res != NULL)     mysql_free_result(res);
     return ret;
