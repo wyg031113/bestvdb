@@ -18,7 +18,6 @@ struct vdb_pk
     char dbuser[64];
     char dbpassword[32];
     int pair_id;
-    element_t g;
     element_t CR;
     element_t CT;
     element_t Y;
@@ -41,6 +40,7 @@ struct vdb_ss
 struct vdb_pair
 {
     pairing_t pair;
+    element_t g;
     int n;
     char hi_path[MAX_STR_LEN];
     char hij_path[MAX_STR_LEN];
@@ -67,6 +67,17 @@ struct vdb_proof
 #define T_I_CR              5
 #define T_I_H0              6
 #define T_I_SFINISH         7
+#define T_Q_BEGIN           8
+#define T_Q_ID              9
+#define T_Q_X               10
+#define T_Q_PAIX            11
+#define T_Q_HT              12
+#define T_Q_CDTm1           13
+#define T_Q_CUT             14
+#define T_Q_T               15
+#define T_Q_CFINISH         17
+#define T_Q_SFINISH         18
+#define T_Q_HX              19
 struct vdb_packet
 {
     uint8 type;

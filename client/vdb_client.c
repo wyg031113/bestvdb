@@ -70,7 +70,7 @@ int connect_server()
  * T is the update times
  * y in ZZp
  */
-int hash_HT(element_t H0, element_t y, element_t Cf1, element_t C0, uint64 T)
+int hash(element_t H0, element_t Cf1, element_t C0, uint64 T)
 {
     int len1 = 0;
     int len2 = 0;
@@ -91,14 +91,19 @@ int hash_HT(element_t H0, element_t y, element_t Cf1, element_t C0, uint64 T)
     element_to_bytes(buf+len1, C0);
     memcpy(buf+len1+len2, &T, len3);
     element_from_hash(H0, buf, len);
-	element_pow_zn(H0, H0, y);
+    element_printf("Hash:%B\n", H0);
     free(buf);
 	return SUCCESS;
+}
+int hash_HT(element_t H0, element_t y, element_t Cf1, element_t C0, uint64 T)
+{
+    CHECK_RET(SUCCESS == hash(H0, Cf1, C0, T));
+	element_pow_zn(H0, H0, y);
+    return SUCCESS;
 }
 
 void clear_pk_sk(struct vdb_pk *pk, struct vdb_sk *sk)
 {
-    element_clear(pk->g);
     element_clear(pk->Y);
     element_clear(pk->CR);
     element_clear(sk->y);
@@ -109,9 +114,6 @@ int vdb_init(int serfd, struct vdb_packet *vpk, struct vdb_pk *pk, struct vdb_sk
     element_t H0;
     int ret = FAIL;
 
-    //random select g
-    element_init_G1(pk->g, pair->pair);
-    element_random(pk->g);
 
     //element select y
     element_init_Zr(sk->y, pair->pair);
@@ -119,7 +121,7 @@ int vdb_init(int serfd, struct vdb_packet *vpk, struct vdb_pk *pk, struct vdb_sk
 
     //calculate Y
     element_init_G1(pk->Y, pair->pair);
-    element_pow_zn(pk->Y, pk->g, sk->y);
+    element_pow_zn(pk->Y, pair->g, sk->y);
 
     element_init_G1(pk->CR, pair->pair);
     element_init_G1(H0, pair->pair);
@@ -173,16 +175,18 @@ int handle_init(int serfd, int id)
     memset(pk, 0, sizeof(struct vdb_pk));
     memset(sk, 0, sizeof(struct vdb_sk));
     memset(pair, 0, sizeof(struct vdb_pair));
+    //get  g  from  database
     CHECK_GO(SUCCESS == get_pk_first(conn_pk, id, pk), out);
     CHECK_GO(SUCCESS == get_pair(conn_pk, pk->pair_id, pair), out);
     DEBUG("Pair:%p, n:%d, hi:%s, hij:%s\n",
           pair->pair, pair->n, pair->hi_path, pair->hij_path);
+    element_init_G1(pair->g, pair->pair);
     pair_inited = SUCCESS;
 
+    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pair", "g", pair->g, pk->pair_id), out);
     CHECK_GO(SUCCESS == vdb_init(serfd, &vpk, pk, sk, pair, id), out);
     beinit = SUCCESS;
      //save g Y y
-    CHECK_GO(SUCCESS == db_put_ele(conn_pk, "vdb_pk", "g", pk->g, id), out);
     CHECK_GO(SUCCESS == db_put_ele(conn_pk, "vdb_pk", "Y", pk->Y, id), out);
     CHECK_GO(SUCCESS == db_put_ele(conn_sk, "vdb_sk", "y", sk->y, id), out);
     CHECK_GO(SUCCESS == db_put_int(conn_pk, "vdb_pk", "CVerTimes", 0, id), out);
@@ -192,7 +196,7 @@ int handle_init(int serfd, int id)
 #ifdef DEBUG_ON
     //test
     int test=0;
-    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pk", "g", pk->g, id), out);
+    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pair", "g", pair->g, pk->pair_id), out);
     CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pk", "Y", pk->Y, id), out);
     CHECK_GO(SUCCESS == db_get_ele(conn_sk, "vdb_sk", "y", sk->y, id), out);
     CHECK_GO(SUCCESS == db_get_int(conn_pk, "vdb_pk", "CVerTimes", &test, id), out);
@@ -203,16 +207,16 @@ int handle_init(int serfd, int id)
 
     //send FINISH
     CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_I_CFINISH, 0, 0), out);
-    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk), out);
 
        //recv server finish
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk), out);
     CHECK_GO(vpk.type == T_I_SFINISH, out);
     CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "beinited", "inited", id), out);
     ret = SUCCESS;
 
 out:
     if(beinit == SUCCESS)           clear_pk_sk(pk, sk);
-    if(pair_inited == SUCCESS)      pairing_clear(pair->pair);
+    if(pair_inited == SUCCESS)      { element_clear(pair->g); pairing_clear(pair->pair); }
     if(conn_pk)                     release_connection(conn_pk);
     if(pair)                        free(pair);
     if(pk)                          free(pk);
@@ -221,9 +225,184 @@ out:
 
 }
 
-void handle_query(int serfd, int id)
+int vdb_verify(int x, mpz_t v, element_t paix, struct vdb_ss *ss, struct vdb_pk *pk,
+               struct vdb_pair *pair, element_t hi)
 {
+	int b1 = 0, b2 = 0;
+	element_t e1,e2, e3, e4, hs, gh,hv, ghhv;
+
+	//e(HT,g)
+	element_init_GT(e1, pair->pair);
+	element_init_GT(e2, pair->pair);
+	element_init_G1(hs, pair->pair);
+	pairing_apply(e1, ss->HT, pair->g, pair->pair);
+	hash(hs, ss->CDTm1, ss->CUT, ss->T);
+
+	//e(H(CTm1, CT, T), Y)
+
+	pairing_apply(e2, hs, pk->Y, pair->pair);
+	//
+	b1 = !element_cmp(e1, e2);
+	element_clear(e1);
+	element_clear(e2);
+	element_clear(hs);
+    if(!b1)
+    {
+    //    pbc_warn("First equation failed!\n");
+    }
+
+
+	//e(GT/HT*hx^vx
+	element_init_GT(e3, pair->pair);
+	element_init_GT(e4, pair->pair);
+	element_init_G1(gh, pair->pair);
+	element_init_G1(hv, pair->pair);
+	element_init_G1(ghhv, pair->pair);
+    //mpz_add(v, v, max_integer);
+    /*
+    if(element_cmp(hi, pp->hi[x]))
+    {
+        printf("Oh, dear!! x= %d\n", x);
+        element_printf("calHi=%B\nhi=%B\n", hi, pp->hi[x]);
+        exit(-1);
+    }
+    */
+    element_printf("CT:%B\n", pk->CT);
+    element_printf("HT:%B\n", ss->HT);
+    element_printf("g:%B\n", pair->g);
+    element_printf("pai:%B\n", paix);
+	element_pow_mpz(hv, hi, v);
+	element_div(gh, pk->CT, ss->HT);
+    element_printf("CT/HT=%B\n", gh);
+	element_div(ghhv, gh, hv);
+	pairing_apply(e3, ghhv, hi, pair->pair);
+
+	//e(paix, g)
+	pairing_apply(e4, paix, pair->g, pair->pair);
+	//
+	b2 = !element_cmp(e3, e4);
+	element_clear(e3);
+	element_clear(e4);
+	element_clear(gh);
+	element_clear(hv);
+	element_clear(ghhv);
+    if(!b2)
+    {
+    //    pbc_warn("Second equation failed!\n");
+    }
+	return b1 && b2;
+
+}
+
+int handle_query(int serfd, int id, int x)
+{
+    struct vdb_pk *pk = NULL;
+    struct vdb_sk *sk = NULL;
+    struct vdb_pair *pair = NULL;
+    void *conn_pk = NULL;
+    void *conn_sk = NULL;
+    void *conn_dt = NULL;
+    int beinit = FAIL;;
+    int pair_inited = FAIL;
+    struct vdb_packet vpk;
+    int ret = FAIL;
+    element_t paix;
+    element_t hx;
+    struct vdb_ss ss;
+    int ss_inited = FAIL;
+    uint64 T = -1;
+    mpz_t v;
+    mpz_init(v);
     DEBUG("Query and Verify.\n");
+    CHECK_GO(NULL != (conn_pk = (void*)get_connection(pk_sql_ip, pk_sql_port, pk_sql_user, pk_sql_passwd, pk_sql_dbname)), out);
+    CHECK_GO(NULL != (conn_sk = (void*)get_connection(sk_sql_ip, sk_sql_port, sk_sql_user, sk_sql_passwd, sk_sql_dbname)), out);
+    CHECK_GO(pk = (struct vdb_pk*)malloc(sizeof(struct vdb_pk)), out);
+    CHECK_GO(sk = (struct vdb_sk*)malloc(sizeof(struct vdb_sk)), out);
+    CHECK_GO(pair = (struct vdb_pair*)malloc(sizeof(struct vdb_pair)), out);
+    memset(pk, 0, sizeof(struct vdb_pk));
+    memset(sk, 0, sizeof(struct vdb_sk));
+    memset(pair, 0, sizeof(struct vdb_pair));
+    CHECK_GO(SUCCESS == get_pk_first(conn_pk, id, pk), out);
+    CHECK_GO(SUCCESS == get_pair(conn_pk, pk->pair_id, pair), out);
+    DEBUG("Pair:%p, n:%d, hi:%s, hij:%s\n",
+          pair->pair, pair->n, pair->hi_path, pair->hij_path);
+    pair_inited = SUCCESS;
+    CHECK_GO(NULL != (conn_dt = (void*)get_connection(pk->ip, pk->port, pk->dbuser, pk->dbpassword, pk->dbname)), out);
+
+    element_init_G1(pk->Y, pair->pair);
+    element_init_G1(sk->y, pair->pair);
+    element_init_G1(pk->CR, pair->pair);
+    element_init_G1(pk->CT, pair->pair);
+    element_init_G1(pair->g, pair->pair);
+    beinit = SUCCESS;
+    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pair", "g", pair->g, pk->pair_id), out);
+    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pk", "CT", pk->CT, id), out);
+    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pk", "Y", pk->Y, id), out);
+    CHECK_GO(SUCCESS == db_get_ele(conn_sk, "vdb_sk", "y", sk->y, id), out);
+    CHECK_GO(SUCCESS == db_get_str(conn_pk, "vdb_pk", "beinited", vpk.data, id), out);
+    CHECK_GO(strcmp(INITED, vpk.data) == 0, out);
+    CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "VerStatus", VER_ING, id), out);
+
+    element_init_G1(paix, pair->pair);
+    element_init_G1(hx, pair->pair);
+    element_init_G1(ss.HT, pair->pair);
+    element_init_G1(ss.CDTm1, pair->pair);
+    element_init_G1(ss.CUT, pair->pair);
+    ss.T = 0;
+    ss_inited = SUCCESS;
+
+
+    //send BEGIN ID x
+    CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_Q_BEGIN, 0, 0), out);
+    CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_Q_ID, sizeof(int), id), out);
+    x = x < 0 ? rand()%pk->dbsize : x;
+    CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_Q_X, sizeof(int), x), out);
+    CHECK_GO(SUCCESS == db_getv(conn_dt, pk->dbtable, x, v), out);
+    //recv PAIX HT CDTm1 CUT T
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk) && vpk.type == T_Q_PAIX, out);
+    CHECK_GO(element_from_bytes_compressed(paix, vpk.data) == vpk.len, out);
+
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk) && vpk.type == T_Q_HT, out);
+    CHECK_GO(element_from_bytes_compressed(ss.HT, vpk.data) == vpk.len, out);
+
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk) && vpk.type == T_Q_CDTm1, out);
+    CHECK_GO(element_from_bytes_compressed(ss.CDTm1, vpk.data) == vpk.len, out);
+
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk) && vpk.type == T_Q_CUT, out);
+    CHECK_GO(element_from_bytes_compressed(ss.CUT, vpk.data) == vpk.len, out);
+
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk) && vpk.type == T_Q_HX, out);
+    CHECK_GO(element_from_bytes_compressed(hx, vpk.data) == vpk.len, out);
+
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk) && vpk.type == T_Q_T, out);
+    CHECK_GO(vpk.len == sizeof(uint64), out);
+    ss.T = *(uint64*)vpk.data;
+    if(vdb_verify(x, v, paix,  &ss, pk, pair, hx))
+        CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "VerStatus", VER_SUCC, id), out);
+    else
+        CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "VerStatus", VER_FAIL, id), out);
+
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk), out);
+    CHECK_GO(vpk.type == T_Q_SFINISH, out);
+    CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_Q_CFINISH, 0, 0), out);
+    ret = SUCCESS;
+out:
+    if(ss_inited == SUCCESS)
+    {
+        element_clear(paix);
+        element_clear(hx);
+        element_clear(ss.HT);
+        element_clear(ss.CDTm1);
+        element_clear(ss.CUT);
+    }
+    if(conn_dt)                     release_connection(conn_dt);
+    if(beinit == SUCCESS)           { clear_pk_sk(pk, sk); element_clear(pk->CT); element_clear(pair->g);}
+    if(pair_inited == SUCCESS)      pairing_clear(pair->pair);
+    if(conn_pk)                     release_connection(conn_pk);
+    if(pair)                        free(pair);
+    if(pk)                          free(pk);
+    INFO("Init finished.!\n");
+    return ret;
 }
 
 void handle_update(int fd)
@@ -245,8 +424,8 @@ int main(int argc, char *argv[])
     CHECK(serfd = connect_server());
     if(beinit>=0)
         handle_init(serfd, beinit);
-    if(query>=0 && idx>=0)
-        handle_query(serfd, idx);
+    if(query>=0)
+        handle_query(serfd, query, idx);
     close(serfd);
 
     return 0;

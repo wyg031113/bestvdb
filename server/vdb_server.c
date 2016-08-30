@@ -101,6 +101,7 @@ int calc_send_CR(int client_fd, void *conn_db, struct vdb_pk *pk,
     {
         CHECK_GO(1 == fread(ele, ele_len, 1, fp), out);
         CHECK_GO(ele_len = element_from_bytes_compressed(hi, ele), out);
+        element_printf("h[%d] = %B\n", i, hi);
         CHECK_GO(SUCCESS == db_getv(conn_db, pk->dbtable, i, vi), out);
         element_pow_mpz(hv, hi, vi);
         if(i == 0)
@@ -108,6 +109,7 @@ int calc_send_CR(int client_fd, void *conn_db, struct vdb_pk *pk,
         else
             element_mul(CR, CR, hv);
     }
+    element_printf("Init CR=%B\n", CR);
     ele_len = element_length_in_bytes_compressed(CR);
     CHECK_GO(ele_len < MAX_DATA_LEN, out);
     element_to_bytes_compressed(vpk->data, CR);
@@ -181,8 +183,8 @@ int handle_init(int client_fd, struct vdb_packet *vpk)
     element_mul(pk->CT, ss->HT, ss->CUT);
     ss->T = 0;
     ct_suc = SUCCESS;
-    CHECK_GO(SUCCESS == db_put_ele(conn_pk, "vdb_pk", "CT", pk->CR, id), out);
-    CHECK_GO(SUCCESS == db_put_ele(conn_pk, "vdb_pk", "CR", pk->CT, id), out);
+    CHECK_GO(SUCCESS == db_put_ele(conn_pk, "vdb_pk", "CR", pk->CR, id), out);
+    CHECK_GO(SUCCESS == db_put_ele(conn_pk, "vdb_pk", "CT", pk->CT, id), out);
     CHECK_GO(NULL != (conn_ss = (void*)get_connection(ss_sql_ip, ss_sql_port,
                                                ss_sql_user, ss_sql_passwd,
                                                ss_sql_dbname)), out);
@@ -213,6 +215,197 @@ out:
     return ret;
 
 }
+int calc_paix(element_t paix, void *conn, struct vdb_pk *pk, struct vdb_pair *pair, int x)
+{
+    char fhij[MAX_FILE_NAME_LEN];
+    char ele[ELEMENT_MAX_LEN];
+    FILE *fp = NULL;
+    int ele_len;
+    int j;
+    mpz_t v;
+    element_t hij;
+    element_t hv;
+    int ret = FAIL;
+    int flag = 0;
+    DEBUG("calculate proof pai...\n");
+    ele_len = pairing_length_in_bytes_compressed_G1(pair->pair);
+    CHECK_RET(ele_len <= ELEMENT_MAX_LEN);
+    CHECK_RET(SUCCESS == check_build_path(params_dir, pair->hij_path, fhij));
+    CHECK_RET(NULL != (fp = fopen(fhij, "r")));
+    element_init_G1(hij, pair->pair);
+    element_init_G1(hv, pair->pair);
+    mpz_init(v);
+
+    for(j = 0; j < pk->dbsize; j++)
+    {
+        int a;
+        int b;
+        if(j == x)
+            continue;
+        if(x > j)
+        {
+            a = x;
+            b = j;
+        }
+        else
+        {
+            a = j;
+            b = x;
+        }
+        CHECK_GO(0 == fseek(fp, ele_len * ((uint64)a *((uint64)a-1)/2+(uint64)b), SEEK_SET), out);
+        CHECK_GO(1 == fread(ele, ele_len, 1, fp), out);
+        CHECK_GO(ele_len = element_from_bytes_compressed(hij, ele), out);
+        element_printf("h[%d][%d]=%B\n", x, j, hij);
+        CHECK_GO(SUCCESS == db_getv(conn, pk->dbtable, j, v), out);
+        element_pow_mpz(hv, hij, v);
+        if(flag == 0)
+            element_set(paix, hv);
+        else
+            element_mul(paix, paix, hv);
+        flag = 1;
+
+    }
+    ret = SUCCESS;
+out:
+    mpz_clear(v);
+    element_clear(hv);
+    element_clear(hij);
+    fclose(fp);
+    return ret;
+}
+
+int send_ele(int client_fd, element_t e, int type, struct vdb_packet *vpk)
+{
+    //send paix
+    vpk->type = type;
+    vpk->len = element_length_in_bytes_compressed(e);
+    CHECK_RET(vpk->len <= ELEMENT_MAX_LEN);
+    CHECK_RET(vpk->len == element_to_bytes_compressed(vpk->data, e));
+    CHECK_RET(vpk->len + HEADER_LEN == write_all(client_fd, vpk, HEADER_LEN + vpk->len));
+    return SUCCESS;
+}
+int send_proof(int client_fd, element_t paix, struct vdb_pair *pair,
+               struct vdb_ss *ss, int x, struct vdb_packet *vpk)
+{
+    char fhi[MAX_FILE_NAME_LEN];
+    FILE *fp = NULL;
+    int ret = FAIL;
+    char ele[ELEMENT_MAX_LEN];
+    int ele_len = 0;
+    element_t hi;
+    DEBUG("Sending proof\n");
+    CHECK_RET(SUCCESS == check_build_path(params_dir, pair->hi_path, fhi));
+    //send paix Ht CDTm1
+    CHECK_RET(SUCCESS == send_ele(client_fd, paix, T_Q_PAIX, vpk));
+    CHECK_RET(SUCCESS == send_ele(client_fd, ss->HT, T_Q_HT, vpk));
+    CHECK_RET(SUCCESS == send_ele(client_fd, ss->CDTm1, T_Q_CDTm1, vpk));
+    CHECK_RET(SUCCESS == send_ele(client_fd, ss->CUT, T_Q_CUT, vpk));
+
+    //send hi
+    CHECK_RET(NULL != (fp = fopen(fhi, "r")));
+    element_init_G1(hi, pair->pair);
+    ele_len = pairing_length_in_bytes_compressed_G1(pair->pair);
+    CHECK_GO(ele_len <= ELEMENT_MAX_LEN, out);
+    CHECK_GO(0 == fseek(fp, (uint64)x*(uint64)ele_len, SEEK_SET), out);
+    CHECK_GO(1 == fread(ele, ele_len, 1, fp), out);
+    CHECK_GO(ele_len == element_from_bytes_compressed(hi, ele), out);
+    CHECK_GO(SUCCESS == send_ele(client_fd, hi, T_Q_HX, vpk), out);
+
+    //send T
+    vpk->type = T_Q_T;
+    vpk->len = sizeof(ss->T);
+    memcpy(vpk->data, &ss->T, sizeof(ss->T));
+    CHECK_GO(write_all(client_fd, vpk, HEADER_LEN + vpk->len) == HEADER_LEN + vpk->len, out);
+    ret = SUCCESS;
+out:
+    element_clear(hi);
+    fclose(fp);
+    return ret;
+
+}
+int handle_query(int client_fd, struct vdb_packet *vpk)
+{
+    int id;
+    int size;
+    int x;
+    void *conn_pk = NULL;
+    void *conn_ss = NULL;
+    void *conn_db = NULL;
+    struct vdb_pk *pk = NULL;
+    struct vdb_ss *ss = NULL;
+    struct vdb_pair *pair = NULL;
+    element_t paix;
+    int pai_inited = FAIL;
+    int pair_inited = FAIL;
+    int hcc_suc = FAIL;
+    FILE *fp = NULL;
+    int ret = FAIL;
+    DEBUG("Handle verify.\n");
+    //begin init
+    CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_Q_ID, out);
+    id = vpk->val;
+    CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_Q_X, out);
+    x = vpk->val;
+    DEBUG("verify id is:%d x is:%d\n", id, x);
+
+    CHECK_GO(NULL != (pk = (struct vdb_pk *)malloc(sizeof(struct vdb_pk))), out);
+    CHECK_GO (NULL != (ss = (struct vdb_ss *)malloc(sizeof(struct vdb_ss))), out);
+    CHECK_GO (NULL != (pair = (struct vdb_pair*)malloc(sizeof(struct vdb_pair))),out);
+    memset(pk, 0, sizeof(struct vdb_pk));
+    memset(ss, 0, sizeof(struct vdb_ss));
+    memset(pair,0,sizeof(struct vdb_pair));
+    CHECK_GO(NULL != (conn_pk = (void*)get_connection(pk_sql_ip, pk_sql_port,
+                                               pk_sql_user, pk_sql_passwd,
+                                               pk_sql_dbname)), out);
+    //get public key from database, dbsize in it
+    CHECK_GO(SUCCESS == get_pk_first(conn_pk, id, pk), out);
+    //get pair from database
+    CHECK_GO(SUCCESS == get_pair(conn_pk, pk->pair_id, pair), out);
+    pair_inited = SUCCESS;
+    element_init_G1(paix, pair->pair);
+    pai_inited = SUCCESS;
+    CHECK_GO(NULL != (conn_db = (void*)get_connection(pk->ip, pk->port, pk->dbuser,
+                                               pk->dbpassword, pk->dbname)), out);
+
+    CHECK_GO(NULL != (conn_ss = (void*)get_connection(ss_sql_ip, ss_sql_port,
+                                               ss_sql_user, ss_sql_passwd,
+                                               ss_sql_dbname)), out);
+    element_init_G1(ss->HT, pair->pair);
+    element_init_G1(ss->CUT, pair->pair);
+    element_init_G1(ss->CDTm1, pair->pair);
+    hcc_suc = SUCCESS;
+    CHECK_GO(SUCCESS == db_get_ele(conn_ss, "vdb_s", "HT", ss->HT, id), out);
+    CHECK_GO(SUCCESS == db_get_ele(conn_ss, "vdb_s", "CUT", ss->CUT, id), out);
+    CHECK_GO(SUCCESS == db_get_ele(conn_ss, "vdb_s", "CDTm1", ss->CDTm1, id), out);
+    CHECK_GO(SUCCESS == db_get_int64(conn_ss, "vdb_s", "T", &ss->T, id), out);
+
+    CHECK_GO(NULL != (conn_ss = (void*)get_connection(ss_sql_ip, ss_sql_port,
+                                               ss_sql_user, ss_sql_passwd,
+                                               ss_sql_dbname)), out);
+    CHECK_GO(SUCCESS == calc_paix(paix, conn_db, pk, pair, x), out);
+    CHECK_GO(SUCCESS == send_proof(client_fd, paix, pair, ss, x, vpk), out);
+    CHECK_GO(SUCCESS == send_val(client_fd, vpk, T_Q_SFINISH, 0, 0), out);
+    CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_Q_CFINISH, out);
+    ret = SUCCESS;
+out:
+    if(hcc_suc == SUCCESS)
+    {
+        element_clear(ss->HT);
+        element_clear(ss->CDTm1);
+        element_clear(ss->CUT);
+    }
+    if(conn_ss)                     release_connection(conn_ss);
+    if(conn_db)                     release_connection(conn_db);
+    if(pai_inited == SUCCESS)       element_clear(paix);
+    if(pair_inited == SUCCESS)      pairing_clear(pair->pair);
+    if(conn_pk)                     release_connection(conn_pk);
+    if(pair)                        free(pair);
+    if(ss)                          free(ss);
+    if(pk)                          free(pk);
+    return ret;
+
+}
+
 void *thread(void *arg)
 {
     int client_fd = (int)arg;
@@ -229,7 +422,11 @@ void *thread(void *arg)
                 CHECK_GO(SUCCESS == handle_init(client_fd, &vpk), out1);
                 DEBUG("Inited successfully.\n");
                 break;
-
+            case T_Q_BEGIN:
+                DEBUG("Begin verifying...\n");
+                CHECK_GO(SUCCESS == handle_query(client_fd, &vpk), out1);
+                DEBUG("Verify finished.\n");
+                break;
             default:
                 DEBUG("Unknow type:%d\n", vpk.type);
                 break;

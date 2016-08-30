@@ -18,18 +18,71 @@ void *get_connection(const char *ip, int port, const char *uname,
     conn = mysql_real_connect(conn, ip, uname, passwd, db, port, NULL, 0);
     return conn;
 }
+int element_to_str(const char *ename, element_t ele, char *e_str)
+{
+    char data[MAX_DATA_LEN];
+    int n;
+    int i;
+    int rv = 0;
+    int len = 0;
+    if(strcmp(ename,"y") == 0)
+        n = element_length_in_bytes(ele);
+    else
+        n = element_length_in_bytes_compressed(ele);
+  // element_printf("n = %d, %s=%B\n", n, ename, ele);
+    CHECK_RET(n <= MAX_DATA_LEN);
+    if(strcmp(ename,"y") == 0)
+        element_to_bytes(data, ele);
+    else
+        element_to_bytes_compressed(data, ele);
 
-int insert_pair(void *connection, char *pair, int n, char *hi, char *hij)
+    for(i = 0; i < n; i++, len+=2)
+        snprintf(e_str+len, 3, "%02x", (unsigned char)data[i]);
+    e_str[len] = '\0';
+    return SUCCESS;
+}
+
+int str_to_element(const char *ename, element_t ele, const char *e_str)
+{
+    int i;
+    unsigned int d;
+    unsigned char tx[3];
+    char data[MAX_DATA_LEN+2];
+    int n = strlen(e_str);
+    CHECK_RET(n/2<MAX_DATA_LEN);
+   for(i = 0; i < n; i+=2)
+    {
+        tx[0] =  e_str[i];
+        tx[1] = e_str[i+1];
+        tx[2] = 0;
+        sscanf(tx,"%x",&d);
+        data[i/2] = (uint8)d;
+    }
+   data[i/2] = 0;
+    if(strcmp(ename,"y") == 0)
+        element_from_bytes(ele, data);
+    else
+        element_from_bytes_compressed(ele, data);
+    element_printf("%s=%B\n", ename, ele);
+    return SUCCESS;
+
+}
+int insert_pair(void *connection, char *pair, element_t g, int n, char *hi, char *hij)
 {
     MYSQL *mysql = (MYSQL*)connection;
     int len = strlen(pair)+strlen(hi)+strlen(hij)+10+128;
     int ret = FAIL;
     char *sql;
+    char e_str[MAX_DATA_LEN*2+1];
+    CHECK_GO(element_to_str("g", g, e_str) == SUCCESS, out);
+    len += strlen(e_str);
     CHECK_RET(sql = malloc(len));
-    snprintf(sql, len, "insert into vdb_pair(pair, n, hi_path, hij_path) values('%s','%d','%s','%s')",
-                        pair, n, hi, hij);
-    mysql_query(mysql, sql);
-    ret = mysql_affected_rows(mysql) == 1?SUCCESS:FAIL;
+
+    snprintf(sql, len, "insert into vdb_pair(pair, g, n, hi_path, hij_path) values('%s','%s','%d','%s','%s')",
+                        pair, e_str, n, hi, hij);
+    if(!mysql_query(mysql, sql))
+        ret = SUCCESS;
+out:
     free(sql);
     return ret;
 }
@@ -102,7 +155,7 @@ int get_pair(void *connection, int pair_id, struct vdb_pair *pair)
     CHECK_RET(!(ret = mysql_query(conn, sql)));
     CHECK_RET(res = mysql_use_result(conn));
     CHECK_GO(row = mysql_fetch_row(res), out2);
-    for(i = 0; i < 4; i++)
+    for(i = 0; i < 5; i++)
     {
         CHECK_GO(row[i], out1);
         field = mysql_fetch_field_direct(res, i);
@@ -146,25 +199,8 @@ int db_exist(void *connection, const char *table, int id)
 int db_put_ele(void *connection, const char *table, const char *ename, element_t ele, int id)
 {
     char sql[MAX_SQL_LEN];
-    char data[MAX_DATA_LEN];
     char e_str[MAX_DATA_LEN*2+1];
-    int n;
-    int i;
-    int rv = 0;
-    element_printf("n = %d, %s=%B\n", n, ename, ele);
-    if(strcmp(ename,"y") == 0)
-        n = element_length_in_bytes(ele);
-    else
-        n = element_length_in_bytes_compressed(ele);
-    CHECK_RET(n <= MAX_DATA_LEN);
-    if(strcmp(ename,"y") == 0)
-        element_to_bytes(data, ele);
-    else
-        element_to_bytes_compressed(data, ele);
-    int len = 0;
-    for(i = 0; i < n; i++, len+=2)
-        snprintf(e_str+len, 3, "%02x", (unsigned char)data[i]);
-    e_str[len] = '\0';
+    CHECK_RET(SUCCESS == element_to_str(ename, ele, e_str));
     MYSQL *conn = (MYSQL*)connection;
     if(FAIL == db_exist(connection, table, id))
         snprintf(sql, MAX_SQL_LEN, "insert into %s(id, %s) values('%d', '%s')",table, ename, id, e_str);
@@ -177,36 +213,16 @@ int db_put_ele(void *connection, const char *table, const char *ename, element_t
 int db_get_ele(void *connection, const char *table, const char *ename, element_t ele, int id)
 {
     char sql[MAX_SQL_LEN];
-    char data[MAX_DATA_LEN+2];
     int ret = FAIL;
-    int n;
-    int i;
     MYSQL_RES *res = NULL;
     MYSQL_ROW row;
     MYSQL *conn = (MYSQL*)connection;
     element_snprintf(sql, MAX_SQL_LEN, "select  %s from %s where id = '%d'", ename, table, id);
-   CHECK_RET(!(mysql_query(conn, sql)));
+    CHECK_RET(!(mysql_query(conn, sql)));
     CHECK_RET(res = mysql_use_result(conn));
     CHECK_GO(row = mysql_fetch_row(res), out2);
     CHECK_GO(row[0], out2);
-    n = strlen(row[0]);
-    CHECK_GO(n/2 <= MAX_DATA_LEN, out1);
-    unsigned int d;
-    unsigned char tx[3];
-   for(i = 0; i < n; i+=2)
-    {
-        tx[0] =  row[0][i];
-        tx[1] = row[0][i+1];
-        tx[2] = 0;
-        sscanf(tx,"%x",&d);
-        data[i/2] = (uint8)d;
-    }
-   data[i/2] = 0;
-    if(strcmp(ename,"y") == 0)
-        element_from_bytes(ele, data);
-    else
-        element_from_bytes_compressed(ele, data);
-    element_printf("%s=%B\n", ename, ele);
+    CHECK_GO(SUCCESS == str_to_element(ename, ele, row[0]), out1);
     ret = SUCCESS;
 out1:
     while(NULL != (mysql_fetch_row(res)));
@@ -363,6 +379,7 @@ int db_getv(void *connection, const char *table, int x, mpz_t v)
         snprintf(md_str+len, 3, "%02x", (unsigned char)md[i]);
     mpz_set_str(v, md_str, 16);
     ret = SUCCESS;
+    mpz_out_str(stdout, 10, v);
 out:
     if(res != NULL)     mysql_free_result(res);
     return ret;
@@ -383,7 +400,7 @@ int test_main()
     char hix[] = "a/b/chi";
     char hij[] = "a/b/chij";
     char n[] = "2323";
-    CHECK2(SUCCESS == insert_pair(conn, pa, 2323, hix, hij));
+    /*CHECK2(SUCCESS == insert_pair(conn, pa, 2323, hix, hij));
     struct vdb_pk pk;
     struct vdb_pair pair;
     get_pk_first(conn, 1, &pk);
@@ -392,4 +409,5 @@ int test_main()
           pair.pair, pair.n, pair.hi_path, pair.hij_path);
     //get_pair(conn, 1, NULL);
     release_connection(conn);
+    */
 }

@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <deftype.h>
 #include <time.h>
+#include <sys/stat.h>
 
 #include <config.h>
 #include <debug.h>
@@ -27,6 +28,14 @@ int nproc = 1;
 int help = 0;
 char server_conf[MAX_FILE_NAME_LEN] = "../server/vdb_server_conf/params";
 char client_conf[MAX_FILE_NAME_LEN] = "../client/vdb_client_conf/params";
+
+char pk_sql_ip[17] = "127.0.0.1";
+int  pk_sql_port = 3306;
+char pk_sql_user[64] = "root";
+char pk_sql_passwd[64] = "letmein";
+char pk_sql_dbname[64] = "vdb_server";
+
+
 struct config config_table[]=
 {
         {"q", &q, CFG_INT, sizeof(int), "q:", "q in G"},
@@ -36,6 +45,11 @@ struct config config_table[]=
         {"help", &help, CFG_INT, sizeof(int), "h", "help"},
         {"server_conf", server_conf, CFG_STR, MAX_FILE_NAME_LEN, "s:", "server's config file"},
         {"client_conf", client_conf, CFG_STR, MAX_FILE_NAME_LEN, "c:", "client's config file"},
+        {"pk_sql_ip", pk_sql_ip, CFG_STR, 17, "", "" },
+        {"pk_sql_port", &pk_sql_port, CFG_INT, sizeof(int), "", ""},
+        {"pk_sql_user", pk_sql_user, CFG_STR, 64, "", "" },
+        {"pk_sql_passwd", pk_sql_passwd, CFG_STR, 64, "", "" },
+        {"pk_sql_dbname", pk_sql_dbname, CFG_STR, 64, "", "" },
         {NULL, NULL, 0, 0, "", NULL}
 };
 
@@ -100,9 +114,12 @@ void *hi_process(void *arg)
     for(i = 0; i < ht->len; i++)
     {
 		element_pp_pow_zn(hi, z[i+ht->start], gpp);
+        printf("%lld", i);
+        element_printf("H[] = %B\n", hi);
         CHECK2(element_to_bytes_compressed(ele, hi) == ele_len);
         CHECK2(fwrite(ele, ele_len, 1, fp) == 1);
     }
+    element_clear(hi);
 	element_pp_clear(gpp);
     fclose(fp);
     return 0;
@@ -138,6 +155,8 @@ void *hij_process(void*arg)
 		    element_pp_pow_zn(hij, mulz, gpp);
             CHECK2(element_to_bytes_compressed(ele, hij) == ele_len);
             CHECK2(fwrite(ele, ele_len, 1, fp) == 1);
+            printf("%lld,%lld", i, j);
+            element_printf("H[][] = %B\n", hij);
         }
 
     int new_start = n - ht->start - ht->len;
@@ -151,6 +170,8 @@ void *hij_process(void*arg)
 		    element_pp_pow_zn(hij, mulz, gpp);
             CHECK2(element_to_bytes_compressed(ele, hij) == ele_len);
             CHECK2(fwrite(ele, ele_len, 1, fp) == 1);
+            printf("%lld,%lld", i, j);
+            element_printf("H[][] = %B\n", hij);
         }
 
 	element_pp_clear(gpp);
@@ -211,6 +232,36 @@ void task_split(int n, int nproc, void *(*thread)(void *arg), const char *file_n
     */
 
 }
+
+int save_params_to_db()
+{
+    void *conn_pk;
+    char fhi[MAX_FILE_NAME_LEN];
+    char fhij[MAX_FILE_NAME_LEN];
+    char fpair[MAX_FILE_NAME_LEN];
+    FILE *fpairp = NULL;
+    char *param_str = NULL;
+    int param_len = 0;
+    struct stat st;
+    int ret;
+    CHECK_GO(check_build_path(server_conf, APARAM, fpair) == SUCCESS, out);
+    snprintf(fhi, MAX_FILE_NAME_LEN, "%d/%s", n, FILE_HI);
+    snprintf(fhij, MAX_FILE_NAME_LEN, "%d/%s", n, FILE_HIJ);
+    CHECK_GO(0 == stat(fpair, &st), out);
+    CHECK_GO(param_str = (char*)malloc(st.st_size+1), out);
+    CHECK_GO(fpairp = fopen(fpair, "r"), out);
+    CHECK_GO(1 == fread(param_str, st.st_size, 1, fpairp), out);
+    param_str[st.st_size] = '\0';
+    int nx = element_length_in_bytes_compressed(g);
+    CHECK_GO(NULL != (conn_pk = (void*)get_connection(pk_sql_ip, pk_sql_port, pk_sql_user, pk_sql_passwd, pk_sql_dbname)), out);
+    CHECK_GO(SUCCESS == insert_pair(conn_pk, param_str, g, n, fhi, fhij), out);
+    ret = SUCCESS;
+out:
+    if(param_str)   free(param_str);
+    if(fpairp)      fclose(fpairp);
+    if(conn_pk)     release_connection(conn_pk);
+    return ret;
+}
 void gene_vdb_param(void)
 {
     int i;
@@ -221,8 +272,8 @@ void gene_vdb_param(void)
     INFO("Random select g.\n");
 	element_init_G1(g, pair);		//let g be a generator of G1
    	element_random(g);
-    //check_build_path(client_conf, FILE_g, fbuf);
-    //save_ele(g, fbuf);
+    check_build_path(server_conf, FILE_g, fbuf);
+    save_ele(g, fbuf);
 /*
     INFO("Random select y.\n");
 	element_init_Zr(y, pair);
@@ -301,6 +352,8 @@ int main(int argc, char *argv[])
     gen_aparam();
     save_n();
     gene_vdb_param();
+    INFO("Save params to file successfully.\n");
+    CHECK_RET(SUCCESS == save_params_to_db());
     show_all_global_element();
     destroy_global_elemment();
     INFO("params generate finished.\n");
