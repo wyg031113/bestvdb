@@ -1,10 +1,10 @@
 #!/bin/bash
 
+j=1
 while true
 do
     vdb_client -b $1
-    j=0
-    i=0
+    i=1
     while [ $i -lt 100 ]
     do
         echo test:$i/$j
