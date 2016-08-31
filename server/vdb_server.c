@@ -377,9 +377,6 @@ int handle_query(int client_fd, struct vdb_packet *vpk)
     CHECK_GO(SUCCESS == db_get_ele(conn_ss, "vdb_s", "CDTm1", ss->CDTm1, id), out);
     CHECK_GO(SUCCESS == db_get_int64(conn_ss, "vdb_s", "T", &ss->T, id), out);
 
-    CHECK_GO(NULL != (conn_ss = (void*)get_connection(ss_sql_ip, ss_sql_port,
-                                               ss_sql_user, ss_sql_passwd,
-                                               ss_sql_dbname)), out);
     CHECK_GO(SUCCESS == calc_paix(paix, conn_db, pk, pair, x), out);
     CHECK_GO(SUCCESS == send_proof(client_fd, paix, pair, ss, x, vpk), out);
     CHECK_GO(SUCCESS == send_val(client_fd, vpk, T_Q_SFINISH, 0, 0), out);
@@ -432,6 +429,7 @@ void *thread(void *arg)
     }
 out1:
     close(client_fd);
+    mysql_thread_end();
     INFO("Client closed!\n");
 }
 
@@ -445,12 +443,16 @@ void run_server(void)
         pthread_t tid;
         if(client_fd < 0)
             break;
+        //thread((void*)client_fd);
+        //continue;
         if(pthread_create(&tid, NULL, thread, (void*)client_fd) != 0)
         {
             INFO("Can't create thread.\n");
             close(client_fd);
         }
     }
+    close(listen_fd);
+    INFO("Server exited.\n");
 }
 
 void init_daemon()

@@ -206,8 +206,10 @@ out:
     if(beinit == SUCCESS)           clear_pk_sk(pk, sk);
     if(pair_inited == SUCCESS)      { element_clear(pair->g); pairing_clear(pair->pair); }
     if(conn_pk)                     release_connection(conn_pk);
+    if(conn_sk)                     release_connection(conn_sk);
     if(pair)                        free(pair);
     if(pk)                          free(pk);
+    if(sk)                          free(sk);
     INFO("Init finished.!\n");
     return ret;
 
@@ -382,9 +384,13 @@ out:
     if(beinit == SUCCESS)           { clear_pk_sk(pk, sk); element_clear(pk->CT); element_clear(pair->g);}
     if(pair_inited == SUCCESS)      pairing_clear(pair->pair);
     if(conn_pk)                     release_connection(conn_pk);
+    if(conn_sk)                     release_connection(conn_sk);
+    if(sk)                          free(sk);
     if(pair)                        free(pair);
     if(pk)                          free(pk);
+    mpz_clear(v);
     INFO("Query finished.!\n");
+
     return ret;
 }
 
@@ -396,6 +402,7 @@ void handle_update(int fd)
 int main(int argc, char *argv[])
 {
     int serfd = -1;
+    srand(time(NULL));
     CHECK(load_config(config_file));
     parse_cmdline(argc, argv);
     if(help)
@@ -415,6 +422,6 @@ int main(int argc, char *argv[])
         return ver_status;
     }
     close(serfd);
-
+    mysql_thread_end();
     return 0;
 }

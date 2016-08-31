@@ -13,9 +13,11 @@ void *get_connection(const char *ip, int port, const char *uname,
 {
     MYSQL *conn = NULL;
     conn = mysql_init(NULL);
-    if(!conn)
-        return conn;
+    INFO("Init conn. %p\n", conn);
+    CHECK_GO(conn != NULL, out);
     conn = mysql_real_connect(conn, ip, uname, passwd, db, port, NULL, 0);
+out:
+    INFO("get conn. %p\n", conn);
     return conn;
 }
 int element_to_str(const char *ename, element_t ele, char *e_str)
@@ -153,12 +155,14 @@ int get_pair(void *connection, int pair_id, struct vdb_pair *pair)
     CHECK_RET(!(ret = mysql_query(conn, sql)));
     CHECK_RET(res = mysql_use_result(conn));
     CHECK_GO(row = mysql_fetch_row(res), out2);
-    for(i = 0; i < 5; i++)
+    for(i = 0; i < 4; i++)
     {
         CHECK_GO(row[i], out1);
         field = mysql_fetch_field_direct(res, i);
         if(i!=0 && !IS_NUM(field->type))
+        {
             CHECK_GO(strlen(row[i]) <  MAX_STR_LEN, out1);
+        }
 
     }
     CHECK_GO(!pairing_init_set_str(pair->pair, row[0]), out1);
@@ -191,6 +195,7 @@ int db_exist(void *connection, const char *table, int id)
     row = mysql_fetch_row(res);
     if(row != NULL)
         ret = SUCCESS;
+    while(mysql_fetch_row(res));
     mysql_free_result(res);
     return ret;
 }
@@ -287,7 +292,6 @@ int db_get_int64(void *connection, const char *table, const char *ename, int64 *
     CHECK_RET(!(mysql_query(conn, sql)));
     CHECK_RET(res = mysql_use_result(conn));
     CHECK_GO(row = mysql_fetch_row(res), out2);
-    CHECK_GO(field = mysql_fetch_fields(res), out2);
     CHECK_GO(row[0], out2);
     *val = atoll(row[0]);
 
@@ -378,6 +382,7 @@ int db_getv(void *connection, const char *table, int x, mpz_t v)
     mpz_set_str(v, md_str, 16);
     ret = SUCCESS;
 out:
+    while(NULL != (mysql_fetch_row(res)));
     if(res != NULL)     mysql_free_result(res);
     return ret;
 }
@@ -387,6 +392,7 @@ out:
 void release_connection(void *conn)
 {
     mysql_close((MYSQL *)conn);
+    INFO("release conn.%p\n", conn);
 }
 int test_main()
 {

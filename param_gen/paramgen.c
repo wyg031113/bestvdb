@@ -216,6 +216,7 @@ void task_split(int n, int nproc, void *(*thread)(void *arg), const char *file_n
     for(i = 0; nproc > 1 && i < nproc; i++)
         waitpid(hi_tasks[i].pid, &status, 0);
     printf("Master.....\n");
+    free(hi_tasks);
     /*
     for(i = 0; i < nproc; i++)
     {
