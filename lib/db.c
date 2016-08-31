@@ -17,7 +17,6 @@ void *get_connection(const char *ip, int port, const char *uname,
     CHECK_GO(conn != NULL, out);
     conn = mysql_real_connect(conn, ip, uname, passwd, db, port, NULL, 0);
 out:
-    INFO("get conn. %p\n", conn);
     return conn;
 }
 int element_to_str(const char *ename, element_t ele, char *e_str)
@@ -392,7 +391,6 @@ out:
 void release_connection(void *conn)
 {
     mysql_close((MYSQL *)conn);
-    INFO("release conn.%p\n", conn);
 }
 int test_main()
 {
