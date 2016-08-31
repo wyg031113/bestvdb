@@ -9,6 +9,8 @@
 #define VER_SUCC "success"
 #define VER_FAIL "fail"
 #define VER_ING  "verifying"
+#define UPD_ING "updating"
+#define UPD_FIN "updated"
 struct vdb_pk
 {
     char ip[17];
@@ -67,6 +69,7 @@ struct vdb_proof
 #define T_I_CR              5
 #define T_I_H0              6
 #define T_I_SFINISH         7
+
 #define T_Q_BEGIN           8
 #define T_Q_ID              9
 #define T_Q_X               10
@@ -75,9 +78,16 @@ struct vdb_proof
 #define T_Q_CDTm1           13
 #define T_Q_CUT             14
 #define T_Q_T               15
-#define T_Q_CFINISH         17
-#define T_Q_SFINISH         18
-#define T_Q_HX              19
+#define T_Q_HX              17
+#define T_Q_CFINISH         18
+#define T_Q_SFINISH         19
+
+#define T_U_BEGIN           20
+#define T_U_HT              21
+#define T_U_CUT             22
+#define T_U_CFINISH         23
+#define T_U_SFINISH         24
+#define T_U_SQL             25
 struct vdb_packet
 {
     uint8 type;
@@ -90,4 +100,5 @@ struct vdb_packet
 }__attribute__((packed));
 
 int send_val(int serfd, struct vdb_packet *vpk, int type, int len, int val);
+int send_ele(int client_fd, element_t e, int type, struct vdb_packet *vpk);
 int recv_pkt(int serfd, struct vdb_packet *vpk);

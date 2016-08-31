@@ -7,7 +7,7 @@
 
 #include <vdb.h>
 #include <debug.h>
-
+#include <param.h>
 /*向fd中写入len字节数据，直到完全写入或者出错
  * 才返回。
  * return:实际写入字节数
@@ -74,4 +74,16 @@ int recv_pkt(int serfd, struct vdb_packet *vpk)
     CHECK_RET(read_all(serfd, vpk->data, vpk->len) == vpk->len);
     return SUCCESS;
 }
+
+int send_ele(int client_fd, element_t e, int type, struct vdb_packet *vpk)
+{
+    //send paix
+    vpk->type = type;
+    vpk->len = element_length_in_bytes_compressed(e);
+    CHECK_RET(vpk->len <= ELEMENT_MAX_LEN);
+    CHECK_RET(vpk->len == element_to_bytes_compressed(vpk->data, e));
+    CHECK_RET(vpk->len + HEADER_LEN == write_all(client_fd, vpk, HEADER_LEN + vpk->len));
+    return SUCCESS;
+}
+
 

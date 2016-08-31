@@ -18,6 +18,7 @@ int beinit = -1;
 int idx = -1;
 int query = -1;
 int update = -1;
+char usql[65536];
 const char *config_file = "/etc/vdb_client_conf/vdb_client.conf";
 
 char sk_sql_ip[17] = "127.0.0.1";
@@ -40,6 +41,8 @@ struct config config_table[] =
             {"beinit", &beinit, CFG_INT, sizeof(int), "b:", "-b id, id in pk."},
             {"idx", &idx, CFG_INT, sizeof(int), "x:", "x in database."},
             {"query", &query, CFG_INT, sizeof(int), "q:", "query and verify, use -q id -x x"},
+            {"update", &update, CFG_INT, sizeof(int), "t:", "-t id -x x -u sql"},
+            {"usql", usql, CFG_STR, 65536, "u:", "sql to update." },
             {"sk_sql_ip", sk_sql_ip, CFG_STR, 17, "", "" },
             {"sk_sql_port", &sk_sql_port, CFG_INT, sizeof(int), "", ""},
             {"sk_sql_user", sk_sql_user, CFG_STR, 64, "", "" },
@@ -271,7 +274,9 @@ int vdb_verify(int x, mpz_t v, element_t paix, struct vdb_ss *ss, struct vdb_pk 
 
 }
 
-int handle_query(int serfd, int id, int x)
+void vdb_update_client(int x, struct vdb_pk *pk, struct vdb_pair *pair, struct vdb_ss *ss, struct vdb_sk *sk,
+                      element_t hi,  mpz_t vx,  mpz_t new_vx);
+int handle_query2(int serfd, int id, int x, int opt, char *sql)
 {
     struct vdb_pk *pk = NULL;
     struct vdb_sk *sk = NULL;
@@ -307,7 +312,7 @@ int handle_query(int serfd, int id, int x)
     CHECK_GO(NULL != (conn_dt = (void*)get_connection(pk->ip, pk->port, pk->dbuser, pk->dbpassword, pk->dbname)), out);
 
     element_init_G1(pk->Y, pair->pair);
-    element_init_G1(sk->y, pair->pair);
+    element_init_Zr(sk->y, pair->pair);
     element_init_G1(pk->CR, pair->pair);
     element_init_G1(pk->CT, pair->pair);
     element_init_G1(pair->g, pair->pair);
@@ -319,13 +324,11 @@ int handle_query(int serfd, int id, int x)
     CHECK_GO(SUCCESS == db_get_str(conn_pk, "vdb_pk", "beinited", vpk.data, id), out);
     CHECK_GO(strcmp(INITED, vpk.data) == 0, out);
     CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "VerStatus", VER_ING, id), out);
-
     element_init_G1(paix, pair->pair);
     element_init_G1(hx, pair->pair);
     element_init_G1(ss.HT, pair->pair);
     element_init_G1(ss.CDTm1, pair->pair);
     element_init_G1(ss.CUT, pair->pair);
-    ss.T = 0;
     ss_inited = SUCCESS;
 
 
@@ -369,8 +372,37 @@ int handle_query(int serfd, int id, int x)
 
     CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk), out);
     CHECK_GO(vpk.type == T_Q_SFINISH, out);
-    CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_Q_CFINISH, 0, 0), out);
-    ret = SUCCESS;
+    CHECK_GO(ver_status == 1, out);
+    if(opt)
+    {
+        int sql_len = 0;
+        ret = FAIL;
+        mpz_t vt;
+        mpz_init(vt);
+        ret = FAIL;
+        INFO("Update Begin.\n");
+        CHECK_GO(SUCCESS == db_getv_vt(conn_dt, pk->dbtable, sql, x, vt), out1);
+        vdb_update_client(x, pk, pair, &ss, sk, hx, v, vt);
+        CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_U_BEGIN, 0, 0), out1);
+        CHECK_GO(SUCCESS == send_ele(serfd, ss.HT, T_U_HT, &vpk), out1);
+        CHECK_GO(SUCCESS == send_ele(serfd, ss.CUT, T_U_CUT, &vpk), out1);
+        sql_len = strlen(sql);
+        vpk.type = T_U_SQL;
+        vpk.len = sql_len;
+        CHECK_GO(write_all(serfd, &vpk, HEADER_LEN) == HEADER_LEN, out1);
+        CHECK_GO(write_all(serfd, sql, sql_len) == sql_len, out1);
+        CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk) && vpk.type == T_U_SFINISH, out1);
+        CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_U_CFINISH, 0, 0), out);
+        ret = SUCCESS;
+        INFO("Update Successfully.\n");
+    out1:
+        mpz_clear(vt);
+    }
+    else
+    {
+        CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_Q_CFINISH, 0, 0), out);
+        ret = SUCCESS;
+    }
 out:
     if(ss_inited == SUCCESS)
     {
@@ -393,10 +425,50 @@ out:
 
     return ret;
 }
+int handle_query(int serfd, int id, int x)
+{
+    return handle_query2(serfd, id, x, 0, NULL);
+}
+void vdb_update_client(int x, struct vdb_pk *pk, struct vdb_pair *pair, struct vdb_ss *ss, struct vdb_sk *sk,
+                      element_t hi,  mpz_t vx,  mpz_t new_vx)
+{
+	element_t ch, hv, hv2,  new_CT, hs, new_HT;
 
-void handle_update(int fd)
+	element_init_G1(ch, pair->pair);
+	element_init_G1(hv, pair->pair);
+	element_init_G1(hv2, pair->pair);
+	element_init_G1(new_CT, pair->pair);
+
+	element_div(ch, pk->CT, ss->HT); //ch = CT-1/HT-1
+	element_pow_mpz(hv, hi, vx); //hv = hx^v
+	element_pow_mpz(hv2, hi, new_vx); //hv = hx^v
+    element_div(hv, hv, hv2);
+	element_div(new_CT, ch, hv);       //CT=ch * hv
+
+	element_clear(ch);
+	element_clear(hv);
+	element_clear(hv2);
+
+	element_init_G1(hs, pair->pair);
+	element_init_G1(new_HT, pair->pair);
+
+	hash(hs, pk->CT, new_CT, ss->T+1);	//hs=hash(CT-1, CT, T)
+	element_pow_zn(new_HT, hs, sk->y);  //HT = hs^y
+
+
+	element_set(ss->HT, new_HT);
+    element_set(ss->CUT, new_CT);
+	//ss->T = new_T;
+
+	element_clear(new_CT);
+	element_clear(hs);
+	element_clear(new_HT);
+}
+
+int handle_update(int fd, int id, char *sql, int x)
 {
     DEBUG("VDB Update.\n");
+    return handle_query2(fd, id, x, 1, sql);
 }
 
 int main(int argc, char *argv[])
@@ -415,13 +487,21 @@ int main(int argc, char *argv[])
 #endif
     CHECK(serfd = connect_server());
     if(beinit>=0)
-        handle_init(serfd, beinit);
-    if(query>=0)
     {
-        CHECK_RET(SUCCESS == handle_query(serfd, query, idx));
-        return ver_status;
+        handle_init(serfd, beinit);
+        ver_status = 0;
+    }
+    else  if(query>=0)
+    {
+        handle_query(serfd, query, idx);
+    }
+    else  if(update>=0 && strlen(usql)>0 && idx>=0)
+    {
+        INFO("update...\n");
+       handle_update(serfd, update, usql, idx);
     }
     close(serfd);
     mysql_thread_end();
     return 0;
+    return ver_status;
 }

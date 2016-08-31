@@ -13,12 +13,19 @@ void *get_connection(const char *ip, int port, const char *uname,
 {
     MYSQL *conn = NULL;
     conn = mysql_init(NULL);
-    INFO("Init conn. %p\n", conn);
+    DEBUG("Init conn. %p\n", conn);
     CHECK_GO(conn != NULL, out);
     conn = mysql_real_connect(conn, ip, uname, passwd, db, port, NULL, 0);
 out:
     return conn;
 }
+
+int db_query(void *connection, const char *sql)
+{
+    CHECK_RET(!mysql_query((MYSQL*)connection, sql));
+    return SUCCESS;
+}
+
 int element_to_str(const char *ename, element_t ele, char *e_str)
 {
     char data[MAX_DATA_LEN];
@@ -386,29 +393,46 @@ out:
     return ret;
 }
 
+int db_getv_vt(void *connection, const char *table, const char *sql, int x, mpz_t vt)
+{
+    MYSQL *conn = (MYSQL *)connection;
+    char *tran_set="set autocommit=0;";
+    char *tran_rset="set autocommit=1;";
+    char *start_set="start transaction;";
+    char *tran_commit="commit;";
+    char *tran_rollback="rollback;";
+    int ret = FAIL;
+   // CHECK_RET(SUCCESS == db_getv(connection, table, x, v));
+    CHECK_RET(0 == mysql_query(conn, tran_set));
+    CHECK_GO(!mysql_query(conn, start_set), out1);
+    CHECK_GO(!mysql_query(conn, sql), out0);
+    CHECK_GO(SUCCESS == db_getv(connection, table, x, vt), out0);
+    ret = SUCCESS;
+out0:
+    mysql_query(conn, tran_rollback);
+out1:
+    mysql_query(conn, tran_rset);
+    return ret;
+}
 
 
 void release_connection(void *conn)
 {
     mysql_close((MYSQL *)conn);
 }
-int test_main()
+/*int test_main()
 {
     void *conn = NULL;
-    CHECK2(NULL != (conn = get_connection("127.0.0.1", 3306, "root", "letmein", "vdb_server")));
-//int insert_pai(void *connection, char *pair, int n, char *hi, char *hij)
-    char pa[] = "I am pair.....";
-    char hix[] = "a/b/chi";
-    char hij[] = "a/b/chij";
-    char n[] = "2323";
-    /*CHECK2(SUCCESS == insert_pair(conn, pa, 2323, hix, hij));
-    struct vdb_pk pk;
-    struct vdb_pair pair;
-    get_pk_first(conn, 1, &pk);
-    get_pair(conn, 1, &pair);
-    DEBUG("Pair:%p, n:%d, hi:%s, hij:%s\n",
-          pair.pair, pair.n, pair.hi_path, pair.hij_path);
-    //get_pair(conn, 1, NULL);
+    CHECK2(NULL != (conn = get_connection("127.0.0.1", 3306, "root", "letmein", "dbtest")));
+    mpz_t v, vt;
+    mpz_init(v);
+    mpz_init(vt);
+    CHECK2(SUCCESS == db_getv_vt(conn, "plain_tb_test", "update plain_tb_test set zip='13241234' where id = 2", 1, v, vt));
+    mpz_clear(v);
+    mpz_clear(vt);
+    mpz_out_str(stdout, 16, v);
+    printf("\n");
+    mpz_out_str(stdout, 16,  vt);
     release_connection(conn);
-    */
 }
+*/

@@ -272,16 +272,6 @@ out:
     return ret;
 }
 
-int send_ele(int client_fd, element_t e, int type, struct vdb_packet *vpk)
-{
-    //send paix
-    vpk->type = type;
-    vpk->len = element_length_in_bytes_compressed(e);
-    CHECK_RET(vpk->len <= ELEMENT_MAX_LEN);
-    CHECK_RET(vpk->len == element_to_bytes_compressed(vpk->data, e));
-    CHECK_RET(vpk->len + HEADER_LEN == write_all(client_fd, vpk, HEADER_LEN + vpk->len));
-    return SUCCESS;
-}
 int send_proof(int client_fd, element_t paix, struct vdb_pair *pair,
                struct vdb_ss *ss, int x, struct vdb_packet *vpk)
 {
@@ -380,8 +370,44 @@ int handle_query(int client_fd, struct vdb_packet *vpk)
     CHECK_GO(SUCCESS == calc_paix(paix, conn_db, pk, pair, x), out);
     CHECK_GO(SUCCESS == send_proof(client_fd, paix, pair, ss, x, vpk), out);
     CHECK_GO(SUCCESS == send_val(client_fd, vpk, T_Q_SFINISH, 0, 0), out);
-    CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_Q_CFINISH, out);
-    ret = SUCCESS;
+    CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk), out);
+    if(vpk->type == T_Q_CFINISH)
+        ret = SUCCESS;
+    else if(vpk->type == T_U_BEGIN)
+    {
+        char *sql = NULL;
+        element_init_G1(pk->CT, pair->pair);
+        CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_U_HT, out1);
+        CHECK_GO(element_from_bytes_compressed(ss->HT, vpk->data) == vpk->len, out1);
+
+
+        CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_U_CUT, out1);
+        CHECK_GO(element_from_bytes_compressed(ss->CUT, vpk->data) == vpk->len, out1);
+
+        CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pk", "CT", pk->CT, id), out1);
+
+        element_set(ss->CDTm1, pk->CT);
+        element_mul(pk->CT, ss->HT, ss->CUT);
+        CHECK_GO(HEADER_LEN == read_all(client_fd, vpk, HEADER_LEN) && vpk->type == T_U_SQL, out1);
+        CHECK_GO(NULL != (sql = (char*)malloc(vpk->len + 1)), out1);
+        CHECK_GO(vpk->len == read_all(client_fd, sql, vpk->len), out1);
+        sql[vpk->len] = '\0';
+        CHECK_GO(SUCCESS == db_query(conn_db, sql), out1);
+        CHECK_GO(SUCCESS == db_put_ele(conn_ss, "vdb_s", "HT",  ss->HT, id), out1);
+        CHECK_GO(SUCCESS == db_put_ele(conn_ss, "vdb_s", "CUT", ss->CUT, id), out1);
+        CHECK_GO(SUCCESS == db_put_ele(conn_ss, "vdb_s", "CDTm1", ss->CDTm1, id), out1);
+        CHECK_GO(SUCCESS == db_put_ele(conn_pk, "vdb_pk", "CT", pk->CT, id), out1);
+        CHECK_GO(SUCCESS == db_put_int64(conn_pk, "vdb_s", "T", ss->T+1, id), out1);
+
+        CHECK_GO(SUCCESS == send_val(client_fd, vpk, T_U_SFINISH, 0, 0), out1);
+        CHECK_GO(SUCCESS == recv_pkt(client_fd, vpk) && vpk->type == T_U_CFINISH, out1);
+        ret = SUCCESS;
+        INFO("Update Successfully.\n");
+    out1:
+        if(sql!= NULL)
+            free(sql);
+        element_clear(pk->CT);
+    }
 out:
     if(hcc_suc == SUCCESS)
     {
@@ -400,6 +426,7 @@ out:
     return ret;
 
 }
+
 
 void *thread(void *arg)
 {

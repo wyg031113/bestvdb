@@ -18,5 +18,7 @@ int db_get_int64(void *connection, const char *table, const char *ename, int64 *
 int db_put_int64(void *connection, const char *table, const char *ename, int64 val, int id);
 int db_put_str(void *connection, const char *table, const char *ename, const char *val, int id);
 int db_get_str(void *connection, const char *table, const char *ename, char *val, int id);
+int db_getv_vt(void *connection, const char *table, const char *sql, int x, mpz_t vt);
+int db_query(void *connection, const char *sql);
 void release_connection(void *conn);
 #endif /*__DB_H__*/

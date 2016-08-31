@@ -1,5 +1,5 @@
 all:vdb_server
-CFLAGS=-I../include -DDEBUG_ONx
+CFLAGS=-I../include -DDEBUG_OFF
 LIBS=-lgmp -lpbc -lmysqlclient -lpthread -lcrypto
 vdb_server_c=vdb_server.c ../lib/config.c ../lib/param.c ../lib/db.c ../lib/vdb.c
 CC=gcc
