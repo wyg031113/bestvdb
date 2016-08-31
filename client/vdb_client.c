@@ -394,6 +394,7 @@ int handle_query2(int serfd, int id, int x, int opt, char *sql)
         CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk) && vpk.type == T_U_SFINISH, out1);
         CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_U_CFINISH, 0, 0), out);
         ret = SUCCESS;
+        ver_status = SUCCESS;
         INFO("Update Successfully.\n");
     out1:
         mpz_clear(vt);
@@ -502,6 +503,5 @@ int main(int argc, char *argv[])
     }
     close(serfd);
     mysql_thread_end();
-    return 0;
     return ver_status;
 }
