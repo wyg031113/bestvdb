@@ -115,111 +115,68 @@ void clear_pk_sk(struct vdb_pk *pk, struct vdb_sk *sk)
     element_clear(pk->CR);
     element_clear(sk->y);
 }
-int vdb_init(int serfd, struct vdb_packet *vpk, struct vdb_pk *pk, struct vdb_sk *sk,
-             struct vdb_pair *pair, int id)
+int vdb_init(int serfd, struct vdb_resource *vres, int id)
 {
-    element_t H0;
     int ret = FAIL;
+    element_t H0;
 
-
+    element_init_G1(H0, vres->pair.pair);
     //element select y
-    element_init_Zr(sk->y, pair->pair);
-    element_random(sk->y);
-
+    element_random(vres->sk.y);
     //calculate Y
-    element_init_G1(pk->Y, pair->pair);
-    element_pow_zn(pk->Y, pair->g, sk->y);
-
-    element_init_G1(pk->CR, pair->pair);
-    element_init_G1(H0, pair->pair);
-
+    element_pow_zn(vres->pk.Y, vres->pair.g, vres->sk.y);
     //begin init send begin and id
-    CHECK_GO(SUCCESS == send_val(serfd, vpk, T_I_BEGIN, 0, 0), out2);
-    CHECK_GO(SUCCESS == send_val(serfd, vpk, T_I_ID, sizeof(uint32), id), out1);
+    CHECK_GO(SUCCESS == send_val(serfd, &vres->vpk, T_I_BEGIN, 0, 0), out);
+    CHECK_GO(SUCCESS == send_val(serfd, &vres->vpk, T_I_ID, sizeof(uint32), id), out);
 
     //recv CR
-    CHECK_GO(SUCCESS == recv_pkt(serfd, vpk), out1);
-    CHECK_GO(vpk->type == T_I_CR, out1);
-    CHECK_GO(vpk->len == element_from_bytes_compressed(pk->CR, vpk->data), out1);
-    CHECK_GO(SUCCESS == hash_HT(H0, sk->y, pk->CR, pk->CR, 0), out1);
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vres->vpk), out);
+    CHECK_GO(vres->vpk.type == T_I_CR, out);
+    CHECK_GO(vres->vpk.len == element_from_bytes_compressed(vres->pk.CR, vres->vpk.data), out);
+    CHECK_GO(SUCCESS == hash_HT(H0, vres->sk.y, vres->pk.CR, vres->pk.CR, 0), out);
 
     //send H0
-    vpk->type = T_I_H0;
-    vpk->len = element_length_in_bytes_compressed(H0);
-    CHECK_GO(vpk->len <= MAX_DATA_LEN, out1);
-    element_to_bytes_compressed(vpk->data, H0);
-    CHECK_GO(write_all(serfd, vpk, HEADER_LEN + vpk->len) == vpk->len+HEADER_LEN, out1);
+    vres->vpk.type = T_I_H0;
+    vres->vpk.len = element_length_in_bytes_compressed(H0);
+    CHECK_GO(vres->vpk.len <= MAX_DATA_LEN, out);
+    element_to_bytes_compressed(vres->vpk.data, H0);
+    CHECK_GO(write_all(serfd, &vres->vpk, HEADER_LEN + vres->vpk.len) == vres->vpk.len+HEADER_LEN, out);
 
     ret = SUCCESS;
-out1:
+out:
     element_clear(H0);
-out2:
-    if(ret != SUCCESS)
-        clear_pk_sk(pk, sk);
     return ret;
 }
 
 
 int handle_init(int serfd, int id)
 {
-    struct vdb_pk *pk = NULL;
-    struct vdb_sk *sk = NULL;
-    struct vdb_pair *pair = NULL;
-    void *conn_pk = NULL;
-    void *conn_sk = NULL;
-    int beinit = FAIL;;
-    int pair_inited = FAIL;
-    struct vdb_packet vpk;
     int ret = FAIL;
+    struct vdb_resource * vres = get_vdb_resource();
 
-    DEBUG("Init vdb.\n");
-    CHECK_GO(NULL != (conn_pk = (void*)get_connection(vcc_pk.sql_ip, vcc_pk.sql_port, vcc_pk.sql_user, vcc_pk.sql_passwd, vcc_pk.sql_dbname)), out);
-    CHECK_GO(NULL != (conn_sk = (void*)get_connection(vcc_sk.sql_ip, vcc_sk.sql_port, vcc_sk.sql_user, vcc_sk.sql_passwd, vcc_sk.sql_dbname)), out);
-    CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "beinited", "initing", id), out);
-    CHECK_GO(pk = (struct vdb_pk*)malloc(sizeof(struct vdb_pk)), out);
-    CHECK_GO(sk = (struct vdb_sk*)malloc(sizeof(struct vdb_sk)), out);
-    CHECK_GO(pair = (struct vdb_pair*)malloc(sizeof(struct vdb_pair)), out);
-    memset(pk, 0, sizeof(struct vdb_pk));
-    memset(sk, 0, sizeof(struct vdb_sk));
-    memset(pair, 0, sizeof(struct vdb_pair));
+    CHECK_GO(SUCCESS == vdb_init_res(vres, &vcc_pk, id), out);
+    CHECK_GO(SUCCESS == vdb_client_res_init(vres, &vcc_sk), out);
+    CHECK_GO(SUCCESS == db_put_str(vres->conn_pk, "vdb_pk", "beinited", "initing", id), out);
     //get  g  from  database
-    CHECK_GO(SUCCESS == get_pk_first(conn_pk, id, pk), out);
-    CHECK_GO(SUCCESS == get_pair(conn_pk, pk->pair_id, pair), out);
-    DEBUG("Pair:%p, n:%d, hi:%s, hij:%s\n",
-          pair->pair, pair->n, pair->hi_path, pair->hij_path);
-    element_init_G1(pair->g, pair->pair);
-    pair_inited = SUCCESS;
+    CHECK_GO(SUCCESS == db_get_ele(vres->conn_pk, "vdb_pair", "g", vres->pair.g, vres->pk.pair_id), out);
 
-    CHECK_GO(SUCCESS == db_get_ele(conn_pk, "vdb_pair", "g", pair->g, pk->pair_id), out);
-    CHECK_GO(SUCCESS == vdb_init(serfd, &vpk, pk, sk, pair, id), out);
-    beinit = SUCCESS;
-     //save g Y y
-    CHECK_GO(SUCCESS == db_put_ele(conn_pk, "vdb_pk", "Y", pk->Y, id), out);
-    CHECK_GO(SUCCESS == db_put_ele(conn_sk, "vdb_sk", "y", sk->y, id), out);
-    CHECK_GO(SUCCESS == db_put_int(conn_pk, "vdb_pk", "CVerTimes", 0, id), out);
-    CHECK_GO(SUCCESS == db_put_int(conn_pk, "vdb_pk", "VerTimes", 0, id), out);
-    CHECK_GO(SUCCESS == db_put_int(conn_pk, "vdb_pk", "VerProg", -1, id), out);
-    CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "VerStatus", "idle", id), out);
+    CHECK_GO(SUCCESS == vdb_init(serfd, vres, id), out);
 
+    CHECK_GO(SUCCESS == pk_client_init_put(vres, id), out);
+    CHECK_GO(SUCCESS == db_put_ele(vres->conn_sk, "vdb_sk", "y", vres->sk.y, id), out);
     //send FINISH
-    CHECK_GO(SUCCESS == send_val(serfd, &vpk, T_I_CFINISH, 0, 0), out);
+    CHECK_GO(SUCCESS == send_val(serfd, &vres->vpk, T_I_CFINISH, 0, 0), out);
     //recv server finish
-    CHECK_GO(SUCCESS == recv_pkt(serfd, &vpk), out);
-    CHECK_GO(vpk.type == T_I_SFINISH, out);
-    CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "beinited", "inited", id), out);
+    CHECK_GO(SUCCESS == recv_pkt(serfd, &vres->vpk), out);
+    CHECK_GO(vres->vpk.type == T_I_SFINISH, out);
+    CHECK_GO(SUCCESS == db_put_str(vres->conn_pk, "vdb_pk", "beinited", "inited", id), out);
     ret = SUCCESS;
 
 out:
-    if(beinit == SUCCESS)           clear_pk_sk(pk, sk);
-    if(pair_inited == SUCCESS)      { element_clear(pair->g); pairing_clear(pair->pair); }
-    if(conn_pk)                     release_connection(conn_pk);
-    if(conn_sk)                     release_connection(conn_sk);
-    if(pair)                        free(pair);
-    if(pk)                          free(pk);
-    if(sk)                          free(sk);
+    vdb_rel_vres(vres);
+    free_vdb_resource(vres);
     INFO("Init finished.!\n");
     return ret;
-
 }
 
 int vdb_verify(int x, mpz_t v, element_t paix, struct vdb_ss *ss, struct vdb_pk *pk,
@@ -491,7 +448,6 @@ int main(int argc, char *argv[])
     show_config();
 #endif
     CHECK(serfd = connect_server());
-struct vdb_resource * vres = get_vdb_resource();
     if(beinit>=0)
     {
         handle_init(serfd, beinit);

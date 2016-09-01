@@ -20,6 +20,7 @@ do
         sql="update plain_tb_test set zip='223$j$i' where id = $id"
         echo $sql
         vdb_client -t 1 -x $idx -u "$sql"
+        sleep 3 
     done
     let j=j+1
 done

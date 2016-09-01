@@ -115,10 +115,8 @@ struct vdb_resource
     void *conn_ss;
     void *conn_data;
     int pair_inited;
-    int pk_inited;
-    int sk_inited;
-    int ss_inited;
-    int g_inited;
+    element_t paix;
+    int ele_inited;
 };
 
 struct vdb_config
@@ -137,3 +135,7 @@ struct vdb_config
 int vdb_get_pk_pair(struct vdb_resource *vres, struct vdb_config *pk, int id);
 int vdb_client_res_init(struct vdb_resource *vres, struct vdb_config *cli_sk);
 struct vdb_resource *get_vdb_resource(void);
+int vdb_init_res(struct vdb_resource *vres, struct vdb_config *pk, int id);
+int pk_client_init_put(struct vdb_resource *res, int id);
+int pk_element_put(struct vdb_resource *res, int id);
+void free_vdb_resource(struct vdb_resource *vres);

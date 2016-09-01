@@ -104,17 +104,17 @@ int vdb_init_res(struct vdb_resource *vres, struct vdb_config *pk, int id)
     CHECK_GO(SUCCESS == get_pair(vres->conn_pk, vres->pk.pair_id, &vres->pair), out);
     vres->pair_inited = 1;
     element_init_G1(vres->pair.g, vres->pair.pair);
-    vres->g_inited = 1;
     element_init_G1(vres->pk.CR, vres->pair.pair);
     element_init_G1(vres->pk.CT, vres->pair.pair);
     element_init_G1(vres->pk.Y, vres->pair.pair);
-    vres->pk_inited = 1;
 
     element_init_G1(vres->ss.HT, vres->pair.pair);
     element_init_G1(vres->ss.CDTm1, vres->pair.pair);
     element_init_G1(vres->ss.CUT, vres->pair.pair);
-    vres->ss_inited = 1;
     element_init_Zr(vres->sk.y, vres->pair.pair);
+
+    element_init_G1(vres->paix, vres->pair.pair);
+    vres->ele_inited = 1;
     ret = SUCCESS;
 out:
     return ret;
@@ -220,32 +220,25 @@ int vdb_rel_vres(struct vdb_resource *vres)
         release_connection(vres->conn_ss);
     if(vres->conn_data)
         release_connection(vres->conn_data);
+    vres->conn_pk = NULL;
+    vres->conn_sk = NULL;
+    vres->conn_ss = NULL;
+    vres->conn_data = NULL;
     mysql_thread_end();
-    if(vres->pk_inited)
+    if(vres->ele_inited)
     {
         element_clear(vres->pk.CR);
         element_clear(vres->pk.CT);
         element_clear(vres->pk.Y);
-        vres->pk_inited = 0;
-    }
-    if(vres->sk_inited)
-    {
         element_clear(vres->sk.y);
-        vres->sk_inited = 0;
-    }
-    if(vres->ss_inited)
-    {
         element_clear(vres->ss.HT);
         element_clear(vres->ss.CDTm1);
         element_clear(vres->ss.CUT);
-    }
-    if(vres->g_inited)
-    {
         element_clear(vres->pair.g);
-    }
-    if(vres->pair_inited)
-    {
+        element_clear(vres->paix);
         pairing_clear(vres->pair.pair);
+
+        vres->ele_inited = 0;
     }
 
 }
