@@ -170,7 +170,7 @@ out:
 int sk_element_get(struct vdb_resource *res, int id)
 {
     int ret = FAIL;
-    CHECK_GO(SUCCESS == db_get_ele(res->conn_pk, "vdb_sk", "y", res->sk.y, id), out);
+    CHECK_GO(SUCCESS == db_get_ele(res->conn_sk, "vdb_sk", "y", res->sk.y, id), out);
     ret = SUCCESS;
 out:
     return ret;
