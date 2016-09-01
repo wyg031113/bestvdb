@@ -20,18 +20,22 @@ int query = -1;
 int update = -1;
 char usql[65536];
 const char *config_file = "/etc/vdb_client_conf/vdb_client.conf";
-
-char sk_sql_ip[17] = "127.0.0.1";
-int  sk_sql_port = 3306;
-char sk_sql_user[64] = "root";
-char sk_sql_passwd[64] = "letmein";
-char sk_sql_dbname[64] = "vdb_client";
-
-char pk_sql_ip[17] = "127.0.0.1";
-int  pk_sql_port = 3306;
-char pk_sql_user[64] = "root";
-char pk_sql_passwd[64] = "letmein";
-char pk_sql_dbname[64] = "vdb_server";
+struct vdb_config vcc_sk =
+{
+    "127.0.0.1",
+    3306,
+    "root",
+    "letmein",
+    "vdb_client"
+};
+struct vdb_config vcc_pk =
+{
+    "127.0.0.1",
+    3306,
+    "root",
+    "letmein",
+    "vdb_client"
+};
 
 int ver_status = -1;
 struct config config_table[] =
@@ -43,16 +47,16 @@ struct config config_table[] =
             {"query", &query, CFG_INT, sizeof(int), "q:", "query and verify, use -q id -x x"},
             {"update", &update, CFG_INT, sizeof(int), "t:", "-t id -x x -u sql"},
             {"usql", usql, CFG_STR, 65536, "u:", "sql to update." },
-            {"sk_sql_ip", sk_sql_ip, CFG_STR, 17, "", "" },
-            {"sk_sql_port", &sk_sql_port, CFG_INT, sizeof(int), "", ""},
-            {"sk_sql_user", sk_sql_user, CFG_STR, 64, "", "" },
-            {"sk_sql_passwd", sk_sql_passwd, CFG_STR, 64, "", "" },
-            {"sk_sql_dbname", sk_sql_dbname, CFG_STR, 64, "", "" },
-            {"pk_sql_ip", pk_sql_ip, CFG_STR, 17, "", "" },
-            {"pk_sql_port", &pk_sql_port, CFG_INT, sizeof(int), "", ""},
-            {"pk_sql_user", pk_sql_user, CFG_STR, 64, "", "" },
-            {"pk_sql_passwd", pk_sql_passwd, CFG_STR, 64, "", "" },
-            {"pk_sql_dbname", pk_sql_dbname, CFG_STR, 64, "", "" },
+            {"sk_sql_ip", vcc_sk.sql_ip, CFG_STR, 17, "", "" },
+            {"sk_sql_port", &vcc_sk.sql_port, CFG_INT, sizeof(int), "", ""},
+            {"sk_sql_user", vcc_sk.sql_user, CFG_STR, 64, "", "" },
+            {"sk_sql_passwd", vcc_sk.sql_passwd, CFG_STR, 64, "", "" },
+            {"sk_sql_dbname", vcc_sk.sql_dbname, CFG_STR, 64, "", "" },
+            {"pk_sql_ip", vcc_pk.sql_ip, CFG_STR, 17, "", "" },
+            {"pk_sql_port", &vcc_pk.sql_port, CFG_INT, sizeof(int), "", ""},
+            {"pk_sql_user", vcc_pk.sql_user, CFG_STR, 64, "", "" },
+            {"pk_sql_passwd", vcc_pk.sql_passwd, CFG_STR, 64, "", "" },
+            {"pk_sql_dbname", vcc_pk.sql_dbname, CFG_STR, 64, "", "" },
             {"help", &help, CFG_INT, sizeof(int), "h", "show help."},
             {NULL, NULL, 0, 0, "", NULL}
         };
@@ -169,8 +173,8 @@ int handle_init(int serfd, int id)
     int ret = FAIL;
 
     DEBUG("Init vdb.\n");
-    CHECK_GO(NULL != (conn_pk = (void*)get_connection(pk_sql_ip, pk_sql_port, pk_sql_user, pk_sql_passwd, pk_sql_dbname)), out);
-    CHECK_GO(NULL != (conn_sk = (void*)get_connection(sk_sql_ip, sk_sql_port, sk_sql_user, sk_sql_passwd, sk_sql_dbname)), out);
+    CHECK_GO(NULL != (conn_pk = (void*)get_connection(vcc_pk.sql_ip, vcc_pk.sql_port, vcc_pk.sql_user, vcc_pk.sql_passwd, vcc_pk.sql_dbname)), out);
+    CHECK_GO(NULL != (conn_sk = (void*)get_connection(vcc_sk.sql_ip, vcc_sk.sql_port, vcc_sk.sql_user, vcc_sk.sql_passwd, vcc_sk.sql_dbname)), out);
     CHECK_GO(SUCCESS == db_put_str(conn_pk, "vdb_pk", "beinited", "initing", id), out);
     CHECK_GO(pk = (struct vdb_pk*)malloc(sizeof(struct vdb_pk)), out);
     CHECK_GO(sk = (struct vdb_sk*)malloc(sizeof(struct vdb_sk)), out);
@@ -296,8 +300,8 @@ int handle_query2(int serfd, int id, int x, int opt, char *sql)
     mpz_t v;
     mpz_init(v);
     DEBUG("Query and Verify.\n");
-    CHECK_GO(NULL != (conn_pk = (void*)get_connection(pk_sql_ip, pk_sql_port, pk_sql_user, pk_sql_passwd, pk_sql_dbname)), out);
-    CHECK_GO(NULL != (conn_sk = (void*)get_connection(sk_sql_ip, sk_sql_port, sk_sql_user, sk_sql_passwd, sk_sql_dbname)), out);
+    CHECK_GO(NULL != (conn_pk = (void*)get_connection(vcc_pk.sql_ip, vcc_pk.sql_port, vcc_pk.sql_user, vcc_pk.sql_passwd, vcc_pk.sql_dbname)), out);
+    CHECK_GO(NULL != (conn_sk = (void*)get_connection(vcc_sk.sql_ip, vcc_sk.sql_port, vcc_sk.sql_user, vcc_sk.sql_passwd, vcc_sk.sql_dbname)), out);
     CHECK_GO(pk = (struct vdb_pk*)malloc(sizeof(struct vdb_pk)), out);
     CHECK_GO(sk = (struct vdb_sk*)malloc(sizeof(struct vdb_sk)), out);
     CHECK_GO(pair = (struct vdb_pair*)malloc(sizeof(struct vdb_pair)), out);
@@ -487,6 +491,7 @@ int main(int argc, char *argv[])
     show_config();
 #endif
     CHECK(serfd = connect_server());
+struct vdb_resource * vres = get_vdb_resource();
     if(beinit>=0)
     {
         handle_init(serfd, beinit);

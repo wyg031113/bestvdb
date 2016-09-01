@@ -102,3 +102,38 @@ struct vdb_packet
 int send_val(int serfd, struct vdb_packet *vpk, int type, int len, int val);
 int send_ele(int client_fd, element_t e, int type, struct vdb_packet *vpk);
 int recv_pkt(int serfd, struct vdb_packet *vpk);
+
+struct vdb_resource
+{
+    struct vdb_packet vpk;
+    struct vdb_pk pk;
+    struct vdb_sk sk;
+    struct vdb_ss ss;
+    struct vdb_pair pair;
+    void *conn_pk;
+    void *conn_sk;
+    void *conn_ss;
+    void *conn_data;
+    int pair_inited;
+    int pk_inited;
+    int sk_inited;
+    int ss_inited;
+    int g_inited;
+};
+
+struct vdb_config
+{
+    char sql_ip[17];
+    int  sql_port;
+    char sql_user[64];
+    char sql_passwd[64];
+    char sql_dbname[64];
+};
+#define PK_TB  "vdb_pk"
+#define PAIR_TB "vdb_pair"
+#define SK_TB "vdb_sk"
+#define SS_TB "vdb_s"
+
+int vdb_get_pk_pair(struct vdb_resource *vres, struct vdb_config *pk, int id);
+int vdb_client_res_init(struct vdb_resource *vres, struct vdb_config *cli_sk);
+struct vdb_resource *get_vdb_resource(void);
