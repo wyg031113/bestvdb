@@ -281,20 +281,22 @@ void gene_vdb_param(void)
     end = time(NULL);
     INFO("%d threads to calc hi, use %.2f seconds\n", nproc, (double)(end-start));
 
+#ifdef DEBUG_ON
     start = time(NULL);
     task_split(n, 1, hi_process, "Hi_test");
     end = time(NULL);
     INFO("%d threads to calc hi, use %.2f seconds\n", 1, (double)(end-start));
-
+#endif
     start = time(NULL);
     task_split(n/2+(n%2==1?1:0), nproc, hij_process, FILE_HIJ);
     end = time(NULL);
     INFO("%d threads to calc hij, use %.2f seconds\n", nproc, (double)(end-start));
-
+#ifdef DEBUG_ON
     start = time(NULL);
     task_split(n/2+(n%2==1?1:0), 1, hij_process, "Hij_test");
     end = time(NULL);
     INFO("%d threads to calc hij, use %.2f seconds\n", 1, (double)(end-start));
+#endif
 }
 
 void destroy_global_elemment(void)

@@ -399,11 +399,13 @@ int main(int argc, char *argv[])
     }
     else  if(query>=0)
     {
+        idx--;
         handle_query(serfd, query, idx);
     }
     else  if(update>=0 && strlen(usql)>0 && idx>=0)
     {
         INFO("update...\n");
+        idx--;
        handle_update(serfd, update, usql, idx);
     }
     close(serfd);

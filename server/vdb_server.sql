@@ -1,44 +1,122 @@
-drop database if exists `vdb_server`;
-create database `vdb_server`;
-use `vdb_server`;
-drop table if exists `vdb_pk`;
-create table `vdb_pk`(  `id`        INT NOT NULL  PRIMARY KEY AUTO_INCREMENT,
-                        `ip`        varchar(17),
-                        `port`      int,
-                        `dbname`    varchar(128),
-                        `dbtable`   varchar(128),
-                        `dbuser`    varchar(64),
-                        `dbpassword`varchar(32),
-                        `pair_id`   int,
-                        `CR`        varchar(256),
-                        `CT`        varchar(256),
-                        `Y`         varchar(256),
-                        `beinited`  varchar(64),
-                        `dbsize`    int,
-                        `CVerTimes` int,
-                        `VerTimes`  int,
-                        `LastVerStatus` varchar(64),
-                        `VerStatus` varchar(64),
-                        `VerProg`   int
-                       );
+-- MySQL dump 10.13  Distrib 5.5.49, for debian-linux-gnu (i686)
+--
+-- Host: localhost    Database: vdb_server
+-- ------------------------------------------------------
+-- Server version	5.5.49-0ubuntu0.12.04.1
 
-drop table if exists `vdb_s`;
-create table `vdb_s`(`id`        INT NOT NULL  PRIMARY KEY,
-                     `HT`        varchar(256),
-                     `CDTm1`     varchar(256),
-                     `CUT`       varchar(256),
-                     `T`         bigint
-                    );
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
-drop table if exists `vdb_pair`;
-create table `vdb_pair`( `id`        INT NOT NULL  PRIMARY KEY AUTO_INCREMENT,
-                         `pair`      varchar(4096),
-                         `g`         varchar(256),
-                         `n`         int,
-                         `hi_path`  varchar(64),
-                         `hij_path` varchar(64)
-                       );
+--
+-- Table structure for table `vdb_pair`
+--
 
-insert into vdb_pk(ip, port, dbname, dbpassword, dbtable, beinited, pair_id, dbsize, dbuser) values('127.0.0.1', '3306', 'dbtest', 'letmein', 'plain_tb_test', '0', '1', '80', 'root');
-insert into vdb_pk(ip, port, dbname, dbpassword, dbtable, beinited, pair_id, dbsize, dbuser) values('127.0.0.1', '3306', 'dbtest', 'letmein', 'plain_tb_test', '0', '2', '4', 'root');
+DROP TABLE IF EXISTS `vdb_pair`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `vdb_pair` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `pair` varchar(4096) DEFAULT NULL,
+  `g` varchar(256) DEFAULT NULL,
+  `n` int(11) DEFAULT NULL,
+  `hi_path` varchar(64) DEFAULT NULL,
+  `hij_path` varchar(64) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
+--
+-- Dumping data for table `vdb_pair`
+--
+
+LOCK TABLES `vdb_pair` WRITE;
+/*!40000 ALTER TABLE `vdb_pair` DISABLE KEYS */;
+INSERT INTO `vdb_pair` VALUES (1,'type a\nq 8601343574166311956841965514622400697972482166760306847192681766103410264680766335635218138781049942837762747952803041457501529109258264827731518711111911\nh 11770550580342027044732844031687264308243371859198924253591584322356225831624798016629412455983947070070552\nr 730751167114595186142829002853739519958614802431\nexp2 159\nexp1 138\nsign1 1\nsign0 -1\n','98103e3f98917433064dff26328ac7d7a9864fe42abbd6f90739a92c5ea8d60d55d7a7ba9ebf8f3a09bba27842e773a2bdab938a87dba0fc7e48935ad08d7d8700',70,'70/hi','70/hij'),(2,'type a\nq 8138539346377633152301921942627161752778867983091157535864143860041706209942277072838514308455576452971652570729463661842969291002986153111644479144732483\nh 11137229187427810363636785894077059964353770634360390704962124544649894770335816521015821107965923984811844\nr 730750818665451459101842416358141509827966402561\nexp2 159\nexp1 17\nsign1 1\nsign0 1\n','3af73812a9d3cc593b0138c627df1201710d6c8103d1b1f131962aa2f0176856859aa8bca9c5e2bbbbabc914130cc8256735eb9e3125018b30912f540f9e3dbe00',100,'100/hi','100/hij');
+/*!40000 ALTER TABLE `vdb_pair` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `vdb_pk`
+--
+
+DROP TABLE IF EXISTS `vdb_pk`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `vdb_pk` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ip` varchar(17) DEFAULT NULL,
+  `port` int(11) DEFAULT NULL,
+  `dbname` varchar(128) DEFAULT NULL,
+  `dbtable` varchar(128) DEFAULT NULL,
+  `dbuser` varchar(64) DEFAULT NULL,
+  `dbpassword` varchar(32) DEFAULT NULL,
+  `pair_id` int(11) DEFAULT NULL,
+  `CR` varchar(256) DEFAULT NULL,
+  `CT` varchar(256) DEFAULT NULL,
+  `Y` varchar(256) DEFAULT NULL,
+  `beinited` varchar(64) DEFAULT NULL,
+  `dbsize` int(11) DEFAULT NULL,
+  `CVerTimes` int(11) DEFAULT NULL,
+  `VerTimes` int(11) DEFAULT NULL,
+  `LastVerStatus` varchar(64) DEFAULT NULL,
+  `VerStatus` varchar(64) DEFAULT NULL,
+  `VerProg` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `vdb_pk`
+--
+
+LOCK TABLES `vdb_pk` WRITE;
+/*!40000 ALTER TABLE `vdb_pk` DISABLE KEYS */;
+INSERT INTO `vdb_pk` VALUES (1,'127.0.0.1',3306,'dbtest','plain_tb_test','root','letmein',2,'84e37c3bbc560799f7558dc0feb9b348fcfdbb384e619cb5aee17a710bd6b0f77841d6d7f2f387d3e54811c96bb7bbf2bb086ec2eabd085df0a8efaf78f613cf01','4e5984c556745ad334e61d0d1fe08d53a5648a8124e51661d8f4b53f62a94df23039d6ce20092510e39e78046f397bc95a25ff5e46eeda77b28cf72fa0dd0f8901','2a6e63017b7a62f438c7cfca4fc7f38be69d1dbd2397e07a508aa606216fccfeb1a3e2d2433acb76471f6c90295d4a56eb790769be998a548f823b62dfee9e3c01','inited',80,0,0,NULL,'success',-1),(2,'127.0.0.1',3306,'dbtest','plain_tb_test','root','letmein',2,'7993137c1123940f752c8099044738101b24a7b1323d5d408f7958a95ac7068540e01bfb50cb7aef006907f558a87da0cdd37062763b4f3bcc6fd9633ef894a901','3ef08c6365a0c748f7ec44e1ac88e6b9d9b771054c2eca4a689a67b8b871158124450f0fc4539e03d6cb8ea46954ba3ab4a4eefa83ffffc6eafdece1a692cce201','41cf9fd361866224fc8a2a637b28bbbf4d99aef2fe721995353905a5e7085b3bf2d002831afdaa6a5f349c7128ef6b35e20ef582d82e1ff59c34ab035a13bdd400','inited',4,0,0,NULL,'success',-1);
+/*!40000 ALTER TABLE `vdb_pk` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `vdb_s`
+--
+
+DROP TABLE IF EXISTS `vdb_s`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `vdb_s` (
+  `id` int(11) NOT NULL,
+  `HT` varchar(256) DEFAULT NULL,
+  `CDTm1` varchar(256) DEFAULT NULL,
+  `CUT` varchar(256) DEFAULT NULL,
+  `T` bigint(20) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `vdb_s`
+--
+
+LOCK TABLES `vdb_s` WRITE;
+/*!40000 ALTER TABLE `vdb_s` DISABLE KEYS */;
+INSERT INTO `vdb_s` VALUES (1,'1c6cd348592b9579ce8c91c80af42a5103ce1935733a2c5290efaa30bde15c234be52ee7723dacb8890eb1822cc21e358dbd90170b54b07b758ef257f1a04dd801','29fb6d27f9fb1f424c496253f77974d75114759ea7e73eac4a960154c6d6ae3ee899f746a7652b9c04829896342213c75aec1228037c766262fa914a46a39d3100','191a59db07345f6cc36a2dc53aaa5f8d957366f140e97b824cab219b5a924764da2f03f4035cd861c83e12cf48c215221aaf4c240ce4200bd7c7380f5272220600',1),(2,'26178e37a2fa488665a6e3a860772ba24668fafa1beaf84057b923826ab1cb14c5e9c5340dd994f4f908783b974d4f5a2c7d7adc6e286ecc0198d98f33ace14601','7993137c1123940f752c8099044738101b24a7b1323d5d408f7958a95ac7068540e01bfb50cb7aef006907f558a87da0cdd37062763b4f3bcc6fd9633ef894a901','7993137c1123940f752c8099044738101b24a7b1323d5d408f7958a95ac7068540e01bfb50cb7aef006907f558a87da0cdd37062763b4f3bcc6fd9633ef894a901',0);
+/*!40000 ALTER TABLE `vdb_s` ENABLE KEYS */;
+UNLOCK TABLES;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed on 2016-09-09 16:04:49
